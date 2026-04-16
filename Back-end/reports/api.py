@@ -20,7 +20,7 @@ from reports.schemas import (
     PaginatedReports,
     LookupIn,
 )
-from reports.tasks import process_resporg_lookup, process_report_complaint
+from reports.tasks import process_resporg_lookup, process_report_complaint, submit_to_authorities
 from reports.services.resporg import lookup_resporg, extract_phone_from_url, normalize_phone, extract_campaign_data
 
 router = Router()
@@ -124,6 +124,7 @@ def get_report(request, report_id: UUID):
 
 @router.post("/reports/{report_id}/report", response=ReportActionOut, auth=auth, tags=["Actions"])
 def trigger_report(request, report_id: UUID):
+    """Trigger all reports: carrier + authorities (Phase 3)."""
     report = get_object_or_404(ScamReport, id=report_id)
 
     if report.status == ScamReport.Status.KILLED:
@@ -134,11 +135,15 @@ def trigger_report(request, report_id: UUID):
             "new_status": report.status,
         }
 
+    # Phase 1 & 2: Carrier abuse email
     process_report_complaint.delay(str(report.id))
+    
+    # Phase 3: Authorities (FTC, IC3, brand teams, Google)
+    submit_to_authorities.delay(str(report.id))
 
     return {
         "success": True,
-        "message": "Report queued for sending.",
+        "message": "Report queued for carrier and authority submission.",
         "report_id": report.id,
         "new_status": report.status,
     }

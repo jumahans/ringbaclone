@@ -212,31 +212,56 @@ else:
 
 
 def extract_campaign_data(url: str) -> dict:
-    """Extract campaign ID and other tracking params from URL."""
+    """Extract campaign ID and other tracking params from URL - handles ANY parameter names."""
     try:
         parsed = urlparse(url)
         params = parse_qs(parsed.query)
-
+        
+        # Common campaign ID parameter names across different platforms
+        campaign_id_keys = [
+            "bcid", "cid", "campaign_id", "gad_campaignid", "campaignid",
+            "utm_campaign", "campaign", "click_id", "clickid", "aff_id",
+            "subid", "sub_id", "ref", "source", "track", "tracking",
+            "event", "_event", "session", "session_id", "visitor",
+            "pid", "aid", "oid", "tid", "sid", "mid", "gid",
+            "adid", "ad_id", "creative", "keyword", "matchtype",
+            "device", "placement", "network", "target", "audience",
+            "fbclid", "gclid", "wbraid", "gbraid", "msclkid",
+            "utm_source", "utm_medium", "utm_content", "utm_term",
+        ]
+        
+        # Find first matching campaign ID parameter
         campaign_id = ""
-        for key in ["bcid", "cid", "campaign_id", "utm_id", "utm_content", "utm_term", "id"]:
-            if key in params and params[key] and params[key][0].strip():
-                campaign_id = params[key][0].strip()
+        for key in campaign_id_keys:
+            if key in params:
+                campaign_id = params[key][0]
                 break
-
+        
+        # If no standard key found, look for any parameter that looks like an ID
+        # (contains numbers and is reasonably long)
         if not campaign_id:
             for key, values in params.items():
-                if key.startswith("utm_") and values and values[0].strip():
-                    campaign_id = values[0].strip()
+                value = values[0]
+                # Check if value looks like an ID (has numbers, not too short)
+                if len(value) > 8 and any(c.isdigit() for c in value):
+                    campaign_id = value
                     break
-
-        lp_key = params.get("lpkey", [""])[0]
-
+        
+        # Extract phone number from URL if present
+        phone_in_url = ""
+        url_text = url.replace("-", "").replace(" ", "")
+        phone_match = re.search(r'(1?)([2-9]\d{2})(\d{3})(\d{4})', url_text)
+        if phone_match:
+            phone_in_url = phone_match.group(0)
+        
         return {
             "campaign_id": campaign_id,
-            "lp_key": lp_key,
+            "lp_key": params.get("lpkey", [""])[0],
             "full_url": url,
             "domain": parsed.netloc,
             "path": parsed.path,
+            "phone_in_url": phone_in_url,
+            "all_params": {k: v[0] for k, v in params.items()},  # Debug: all params
         }
     except Exception as e:
         logger.error(f"Campaign data extraction failed: {e}")
@@ -246,4 +271,6 @@ def extract_campaign_data(url: str) -> dict:
             "full_url": url,
             "domain": "",
             "path": "",
+            "phone_in_url": "",
+            "all_params": {},
         }
