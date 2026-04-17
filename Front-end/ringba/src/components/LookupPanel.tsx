@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RefreshCw, Plus, AlertCircle, CheckCircle2, Loader } from "lucide-react";
+import {
+  Search, RefreshCw, Plus, AlertCircle, CheckCircle2,
+  Loader, Phone, Signal, MapPin, Shield, Mail, Cpu
+} from "lucide-react";
 import { reportsApi } from "../api/reports";
 
 interface LookupResult {
@@ -13,6 +16,23 @@ interface LookupResult {
   campaign_id: string;
   domain: string;
   scraping: boolean;
+  line_type: string;
+  is_valid: boolean;
+  is_voip: boolean;
+  country: string;
+  region: string;
+  city: string;
+  timezone: string;
+  international_format: string;
+  national_format: string;
+  risk_level: string;
+  is_disposable: boolean;
+  is_abuse_detected: boolean;
+  line_status: string;
+  sms_email: string;
+  sms_domain: string;
+  mcc: string;
+  mnc: string;
 }
 
 interface LookupPanelProps {
@@ -22,6 +42,69 @@ interface LookupPanelProps {
     landing_url: string;
   }) => void;
 }
+
+const Badge = ({
+  value,
+  color = "gray",
+}: {
+  value: string | boolean | null | undefined;
+  color?: "green" | "red" | "amber" | "blue" | "gray";
+}) => {
+  const colors = {
+    green: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    red: "bg-red-500/10 text-red-400 border-red-500/20",
+    amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    gray: "bg-[#1a1d2e] text-[#9ca3af] border-[#2a2d3a]",
+  };
+  return (
+    <span className={`text-xs font-mono px-2 py-0.5 rounded border ${colors[color]}`}>
+      {String(value ?? "—")}
+    </span>
+  );
+};
+
+const Field = ({
+  label,
+  value,
+  mono = false,
+  loading = false,
+  color,
+}: {
+  label: string;
+  value?: string | boolean | null;
+  mono?: boolean;
+  loading?: boolean;
+  color?: "green" | "red" | "amber" | "blue" | "gray";
+}) => (
+  <div className="min-w-0">
+    <p className="text-xs text-[#4b5563] mb-1">{label}</p>
+    {loading ? (
+      <div className="h-4 w-28 bg-[#1a1d2e] rounded animate-pulse" />
+    ) : color ? (
+      <Badge value={value} color={color} />
+    ) : (
+      <p className={`text-white text-sm break-all ${mono ? "font-mono" : ""}`}>
+        {String(value ?? "—")}
+      </p>
+    )}
+  </div>
+);
+
+const SectionHeader = ({
+  icon: Icon,
+  title,
+}: {
+  icon: React.ElementType;
+  title: string;
+}) => (
+  <div className="flex items-center gap-2 mb-3">
+    <Icon size={13} className="text-[#4b5563]" />
+    <p className="text-xs font-semibold text-[#6b7280] uppercase tracking-widest">
+      {title}
+    </p>
+  </div>
+);
 
 const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
   const [input, setInput] = useState("");
@@ -41,14 +124,12 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
     setScraping(false);
     if (!input.trim()) return;
     setLoading(true);
-
     try {
       const res = await reportsApi.lookup({
         input: input.trim(),
         is_url: isUrl(input.trim()),
       });
       setResult(res);
-
       if (res.scraping && res.lookup_id) {
         setScraping(true);
         listenForPhoneNumber(res.lookup_id);
@@ -62,41 +143,48 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
 
   const listenForPhoneNumber = (lookupId: string) => {
     const token = localStorage.getItem("access_token");
-    const ws = new WebSocket(
-      `ws://127.0.0.1:8000/ws/reports/?token=${token}`
-    );
+    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/reports/?token=${token}`);
     wsRef.current = ws;
-
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === "lookup_result" && data.lookup_id === lookupId) {
         setResult((prev) =>
-          prev
-            ? {
-                ...prev,
-                phone_number: data.phone_number,
-                carrier_name: data.carrier_name,
-                resporg_code: data.resporg_code,
-                abuse_email: data.abuse_email,
-                is_toll_free: data.is_toll_free,
-                scraping: false,
-              }
-            : prev
+          prev ? {
+            ...prev,
+            phone_number: data.phone_number,
+            carrier_name: data.carrier_name,
+            resporg_code: data.resporg_code,
+            abuse_email: data.abuse_email,
+            is_toll_free: data.is_toll_free,
+            line_type: data.line_type,
+            is_valid: data.is_valid,
+            is_voip: data.is_voip,
+            country: data.country,
+            region: data.region,
+            city: data.city,
+            timezone: data.timezone,
+            international_format: data.international_format,
+            national_format: data.national_format,
+            risk_level: data.risk_level,
+            is_disposable: data.is_disposable,
+            is_abuse_detected: data.is_abuse_detected,
+            line_status: data.line_status,
+            sms_email: data.sms_email,
+            sms_domain: data.sms_domain,
+            mcc: data.mcc,
+            mnc: data.mnc,
+            scraping: false,
+          } : prev
         );
         setScraping(false);
         ws.close();
       }
     };
-
-    ws.onerror = () => {
-      setScraping(false);
-    };
+    ws.onerror = () => setScraping(false);
   };
 
   useEffect(() => {
-    return () => {
-      wsRef.current?.close();
-    };
+    return () => { wsRef.current?.close(); };
   }, []);
 
   const handleSubmit = () => {
@@ -109,6 +197,13 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
     setInput("");
     setBrand("");
     setResult(null);
+  };
+
+  const riskColor = (level?: string): "green" | "amber" | "red" | "gray" => {
+    if (!level) return "gray";
+    if (level === "low") return "green";
+    if (level === "medium") return "amber";
+    return "red";
   };
 
   return (
@@ -129,17 +224,13 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
         </div>
       </div>
 
-      {/* Input Row - Stack on mobile */}
+      {/* Input Row */}
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input
           className="flex-1 bg-[#1a1d2e] border border-[#2a2d3a] rounded-lg px-3 sm:px-4 py-3 text-white text-sm font-mono placeholder-[#4b5563] focus:outline-none focus:border-[#3b82f6] transition-colors"
           placeholder="+1 888 555 0100 or https://scam-site.com"
           value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            setResult(null);
-            setError("");
-          }}
+          onChange={(e) => { setInput(e.target.value); setResult(null); setError(""); }}
           onKeyDown={(e) => e.key === "Enter" && handleLookup()}
         />
         <button
@@ -147,11 +238,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
           disabled={loading || !input.trim()}
           className="w-full sm:w-auto px-4 sm:px-5 py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
         >
-          {loading ? (
-            <RefreshCw size={14} className="animate-spin" />
-          ) : (
-            <Search size={14} />
-          )}
+          {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
           <span className="sm:hidden">{loading ? "Looking..." : "Lookup"}</span>
           <span className="hidden sm:inline">{loading ? "Looking up..." : "Lookup"}</span>
         </button>
@@ -168,66 +255,130 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
       {/* Results */}
       {result && (
         <div className="border border-[#1e2130] rounded-xl overflow-hidden">
-          {/* Status Header */}
+
+          {/* Status Bar */}
           <div className="bg-[#1a1d2e] px-3 sm:px-5 py-3 flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-emerald-400 flex items-center gap-2 min-w-0">
               <CheckCircle2 size={13} className="shrink-0" />
               <span className="truncate">
-                {scraping ? "URL identified — scraping..." : "Lookup complete"}
+                {scraping ? "URL identified — scraping for number..." : "Lookup complete"}
               </span>
             </span>
             {scraping && <Loader size={13} className="animate-spin text-amber-400 shrink-0" />}
           </div>
 
-          {/* Data Grid - 1 col mobile, 2 cols tablet, 3 cols desktop */}
-          <div className="p-3 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            <div className="min-w-0">
-              <p className="text-xs text-[#4b5563] mb-1">Phone Number</p>
-              {scraping && !result.phone_number ? (
-                <div className="h-4 w-32 bg-[#1a1d2e] rounded animate-pulse" />
-              ) : (
-                <p className="text-white font-mono text-sm font-bold break-all">
-                  {result.phone_number || "Not found on page"}
-                </p>
-              )}
+          <div className="p-3 sm:p-5 space-y-5">
+
+            {/* Phone Identity */}
+            <div>
+              <SectionHeader icon={Phone} title="Phone Identity" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <Field label="Phone Number" value={result.phone_number || "Scraping..."} mono loading={scraping && !result.phone_number} />
+                <Field label="International" value={result.international_format} mono />
+                <Field label="National" value={result.national_format} mono />
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-[#4b5563] mb-1">Carrier</p>
-              {scraping && !result.carrier_name ? (
-                <div className="h-4 w-24 bg-[#1a1d2e] rounded animate-pulse" />
-              ) : (
-                <p className="text-white text-sm break-words">{result.carrier_name || "—"}</p>
-              )}
+
+            <div className="border-t border-[#1e2130]" />
+
+            {/* Carrier & Line */}
+            <div>
+              <SectionHeader icon={Signal} title="Carrier & Line" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <Field label="Carrier" value={result.carrier_name} loading={scraping && !result.carrier_name} />
+                <Field
+                  label="Line Type"
+                  value={result.line_type || (result.is_toll_free ? "Toll-Free" : "Non-Toll")}
+                  color={result.is_toll_free ? "green" : "amber"}
+                />
+                <Field
+                  label="Line Status"
+                  value={result.line_status || "—"}
+                  color={result.line_status === "active" ? "green" : "red"}
+                />
+                <Field
+                  label="Valid"
+                  value={result.is_valid ? "Yes" : "No"}
+                  color={result.is_valid ? "green" : "red"}
+                />
+                <Field
+                  label="VoIP"
+                  value={result.is_voip ? "Yes" : "No"}
+                  color={result.is_voip ? "red" : "green"}
+                />
+                <Field
+                  label="MCC / MNC"
+                  value={result.mcc && result.mnc ? `${result.mcc} / ${result.mnc}` : "—"}
+                  mono
+                />
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-[#4b5563] mb-1">Type</p>
-              {scraping && !result.is_toll_free ? (
-                <div className="h-4 w-20 bg-[#1a1d2e] rounded animate-pulse" />
-              ) : (
-                <p className={`text-white font-mono text-sm px-2 py-1 rounded inline-block ${result.is_toll_free ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                  {result.is_toll_free ? "Toll-Free" : "Non-Toll"}
-                </p>
-              )}
+
+            <div className="border-t border-[#1e2130]" />
+
+            {/* Location */}
+            <div>
+              <SectionHeader icon={MapPin} title="Location" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <Field label="Country" value={result.country} />
+                <Field label="Region" value={result.region} />
+                <Field label="City" value={result.city} />
+                <Field label="Timezone" value={result.timezone} mono />
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-[#4b5563] mb-1">Abuse Email</p>
-              {scraping && !result.abuse_email ? (
-                <div className="h-4 w-36 bg-[#1a1d2e] rounded animate-pulse" />
-              ) : (
-                <p className="text-blue-400 text-xs font-mono break-all">{result.abuse_email || "—"}</p>
-              )}
+
+            <div className="border-t border-[#1e2130]" />
+
+            {/* Risk */}
+            <div>
+              <SectionHeader icon={Shield} title="Risk Assessment" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <Field
+                  label="Risk Level"
+                  value={result.risk_level || "—"}
+                  color={riskColor(result.risk_level)}
+                />
+                <Field
+                  label="Disposable"
+                  value={result.is_disposable ? "Yes" : "No"}
+                  color={result.is_disposable ? "red" : "green"}
+                />
+                <Field
+                  label="Abuse Detected"
+                  value={result.is_abuse_detected ? "Yes" : "No"}
+                  color={result.is_abuse_detected ? "red" : "green"}
+                />
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-[#4b5563] mb-1">Campaign ID</p>
-              <p className="text-amber-400 font-mono text-sm break-all">{result.campaign_id || "—"}</p>
+
+            <div className="border-t border-[#1e2130]" />
+
+            {/* Messaging */}
+            <div>
+              <SectionHeader icon={Mail} title="SMS / Messaging" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <Field label="SMS Domain" value={result.sms_domain} mono />
+                <Field label="SMS Email" value={result.sms_email} mono />
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-[#4b5563] mb-1">Domain</p>
-              <p className="text-white text-sm font-mono break-all">{result.domain || "—"}</p>
-            </div>
+
+            {/* Campaign / URL — only show if URL lookup */}
+            {(result.campaign_id || result.domain) && (
+              <>
+                <div className="border-t border-[#1e2130]" />
+                <div>
+                  <SectionHeader icon={Cpu} title="Campaign / URL" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                    <Field label="Domain" value={result.domain} mono />
+                    <Field label="Campaign ID" value={result.campaign_id} mono color="amber" />
+                    <Field label="Abuse Email" value={result.abuse_email} mono />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Submit Row - Stack on mobile */}
+          {/* Submit Row */}
           <div className="px-3 sm:px-5 pb-3 sm:pb-5 flex flex-col sm:flex-row gap-2 sm:gap-3">
             <input
               className="flex-1 bg-[#1a1d2e] border border-[#2a2d3a] rounded-lg px-3 sm:px-4 py-2.5 text-white text-sm placeholder-[#4b5563] focus:outline-none focus:border-[#3b82f6] transition-colors"

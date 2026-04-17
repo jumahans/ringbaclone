@@ -25,17 +25,17 @@ def process_resporg_lookup(report_id: str):
 
     try:
         report = ScamReport.objects.get(id=report_id)
-        result = lookup_resporg(report.phone_number)
+        result = lookup_resporg(report.phone_number)  # Returns RespOrgResult object
 
         report.resporg_raw = result.resporg_code
 
-        if result.resporg_code not in ("UNKNWN", "N/A"):
+        if result.resporg_code not in ("UNKNWN", "N/A", ""):
             resporg_obj, _ = RespOrg.objects.get_or_create(
-                code=result.resporg_code,
+                code=result.resporg_code or "UNKNWN",
                 defaults={
                     "carrier_name": result.carrier_name,
                     "abuse_email": result.abuse_email,
-                    "website": result.website,
+                    "website": result.website or "",
                 },
             )
             report.resporg = resporg_obj
@@ -46,7 +46,7 @@ def process_resporg_lookup(report_id: str):
             report=report,
             action=ReportLog.Action.RESPORG_LOOKUP,
             detail=f"RespOrg: {result.resporg_code} ({result.carrier_name})",
-            success=result.resporg_code != "UNKNWN",
+            success=result.resporg_code not in ("UNKNWN", "N/A", ""),
         )
 
         broadcast_update({

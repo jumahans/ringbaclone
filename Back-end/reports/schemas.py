@@ -74,3 +74,35 @@ class LookupIn(Schema):
     input: str
     is_url: bool = False
 
+class LookupIn(Schema):
+    input: str
+    is_url: bool
+
+class LookupOut(Schema):
+    lookup_id: str
+    phone_number: str
+    carrier_name: str
+    resporg_code: str
+    abuse_email: str
+    landing_url: str
+    is_toll_free: bool
+    campaign_id: str
+    domain: str
+    scraping: bool
+    line_type: str
+    is_valid: bool
+    is_voip: bool
+    country: str
+    region: str
+    city: str
+    timezone: str
+    international_format: str
+    national_format: str
+    risk_level: str
+    is_disposable: bool
+    is_abuse_detected: bool
+    line_status: str
+    sms_email: str
+    sms_domain: str
+    mcc: str
+    mnc: str

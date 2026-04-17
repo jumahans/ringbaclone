@@ -5,19 +5,18 @@ import subprocess
 import logging
 import tempfile
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlparse, parse_qs
 
 import requests as req
 
-# --- Change this to DEBUG to see full logs ---
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-TIMEOUT_TWILIO = 10
+TIMEOUT_ABSTRACT = 10
 TIMEOUT_PLAYWRIGHT = 60
 
 
@@ -28,6 +27,23 @@ class RespOrgResult:
     abuse_email: str
     website: str
     is_toll_free: bool
+    line_type: str = ""
+    is_valid: bool = False
+    is_voip: bool = False
+    country: str = ""
+    region: str = ""
+    city: str = ""
+    timezone: str = ""
+    international_format: str = ""
+    national_format: str = ""
+    risk_level: str = ""
+    is_disposable: bool = False
+    is_abuse_detected: bool = False
+    line_status: str = ""
+    sms_email: str = ""
+    sms_domain: str = ""
+    mcc: str = ""
+    mnc: str = ""
 
 
 def normalize_phone(phone: str) -> str:
@@ -39,95 +55,116 @@ def normalize_phone(phone: str) -> str:
 
 
 def lookup_resporg(phone: str) -> RespOrgResult:
-    """Lookup carrier using Twilio Lookup v2 API with full debug logging."""
+    """Lookup carrier using Abstract API phone validation."""
     digits = normalize_phone(phone)
-    e164 = f"+1{digits}"
+    e164 = f"1{digits}"
     logger.debug(f"lookup_resporg: normalized E.164 = {e164}")
 
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-
-    if not account_sid:
-        logger.error("TWILIO_ACCOUNT_SID is not set in environment.")
-        return RespOrgResult("", "Unknown Carrier", "", "", False)
-    if not auth_token:
-        logger.error("TWILIO_AUTH_TOKEN is not set in environment.")
+    api_key = os.getenv("ABSTRACT_API_KEY")
+    logger.error(f"ABSTRACT API KEY LOADED : {repr(api_key)}")
+    if not api_key:
+        logger.error("ABSTRACT_API_KEY is not set in environment.")
         return RespOrgResult("", "Unknown Carrier", "", "", False)
 
-    logger.debug(f"Using Account SID: {account_sid[:8]}... (truncated for security)")
-
-    url = f"https://lookups.twilio.com/v2/PhoneNumbers/{e164}?Fields=line_type_intelligence"
-    logger.debug(f"Request URL: {url}")
+    url = "https://phoneintelligence.abstractapi.com/v1/"
+    params = {
+        "api_key": api_key,
+        "phone": e164,
+    }
 
     try:
-        response = req.get(
-            url,
-            auth=(account_sid, auth_token),
-            timeout=TIMEOUT_TWILIO
-        )
+        response = req.get(url, params=params, timeout=TIMEOUT_ABSTRACT)
         logger.debug(f"HTTP Status: {response.status_code}")
-        logger.debug(f"Raw response body: {response.text}")
 
         if response.status_code == 401:
-            logger.error("Twilio returned 401 Unauthorized — check your ACCOUNT_SID and AUTH_TOKEN.")
+            logger.error("Abstract API returned 401 — check your ABSTRACT_API_KEY.")
             return RespOrgResult("", "Auth Failed", "", "", False)
 
-        if response.status_code == 404:
-            logger.error(f"Twilio returned 404 — phone number {e164} may be invalid or not found.")
+        if response.status_code == 422:
+            logger.error(f"Abstract API returned 422 — invalid phone number: {e164}")
             return RespOrgResult("", "Invalid Number", "", "", False)
 
         response.raise_for_status()
         data = response.json()
-        logger.debug(f"Parsed JSON: {json.dumps(data, indent=2)}")
+        logger.error(f"FULL API RESPONSE: {response.text}")
 
-        line_intel = data.get("line_type_intelligence")
-        logger.debug(f"line_type_intelligence block: {line_intel}")
+        phone_carrier = data.get("phone_carrier", {})
+        phone_validation = data.get("phone_validation", {})
+        phone_location = data.get("phone_location", {})
+        phone_format = data.get("phone_format", {})
+        phone_risk = data.get("phone_risk", {})
+        phone_messaging = data.get("phone_messaging", {})
 
-        if not line_intel:
-            line_type_raw = "unknown"
-            carrier_name = "N/A (toll-free or unsupported type)"
-            logger.warning(
-                f"line_type_intelligence is null/empty for {e164}. "
-                "This is expected for toll-free numbers — Twilio does not provide "
-                "carrier data for toll-free, personal, premium, sharedCost, uan, voicemail, or pager numbers."
-            )
-        else:
-            line_type_raw = line_intel.get("type", "unknown")
-            carrier_name = line_intel.get("carrier_name") or "Unknown Carrier"
-            error_code = line_intel.get("error_code")
+        carrier = phone_carrier.get("name", "Unknown Carrier")
+        line_type = phone_carrier.get("line_type", "")
+        mcc = str(phone_carrier.get("mcc", ""))
+        mnc = str(phone_carrier.get("mnc", ""))
 
-            logger.debug(f"line type: {line_type_raw}")
-            logger.debug(f"carrier_name: {carrier_name}")
-            logger.debug(f"error_code in line_intel: {error_code}")
+        is_valid = phone_validation.get("is_valid", False)
+        line_status = phone_validation.get("line_status", "")
+        is_voip = phone_validation.get("is_voip", False)
 
-            if error_code:
-                logger.warning(
-                    f"Twilio returned error_code={error_code} inside line_type_intelligence. "
-                    "Carrier data may be unavailable for this number type."
-                )
+        country = phone_location.get("country_name", "")
+        region = phone_location.get("region", "")
+        city = phone_location.get("city", "")
+        timezone = phone_location.get("timezone", "")
 
-        is_toll_free = line_type_raw in ("tollFree", "toll_free")
+        international_format = phone_format.get("international", "")
+        national_format = phone_format.get("national", "")
+
+        risk_level = phone_risk.get("risk_level", "")
+        is_disposable = phone_risk.get("is_disposable", False)
+        is_abuse_detected = phone_risk.get("is_abuse_detected", False)
+
+        sms_domain = phone_messaging.get("sms_domain", "")
+        sms_email = phone_messaging.get("sms_email", "")
+
+        is_toll_free = line_type.lower() in ("toll_free", "tollfree") if line_type else False
+
         logger.info(
-            f"Result for {e164}: carrier={carrier_name!r}, "
-            f"type={line_type_raw!r}, is_toll_free={is_toll_free}"
+            f"Result for {e164}: carrier={carrier!r}, "
+            f"type={line_type!r}, valid={is_valid}, is_toll_free={is_toll_free}"
         )
 
-        return RespOrgResult("", carrier_name, "", "", is_toll_free)
+        return RespOrgResult(
+            resporg_code="",
+            carrier_name=carrier,
+            abuse_email="",
+            website="",
+            is_toll_free=is_toll_free,
+            line_type=line_type,
+            is_valid=is_valid,
+            is_voip=is_voip,
+            country=country,
+            region=region,
+            city=city,
+            timezone=timezone,
+            international_format=international_format,
+            national_format=national_format,
+            risk_level=risk_level,
+            is_disposable=is_disposable,
+            is_abuse_detected=is_abuse_detected,
+            line_status=line_status,
+            sms_email=sms_email,
+            sms_domain=sms_domain,
+            mcc=mcc,
+            mnc=mnc,
+        )
 
     except req.exceptions.Timeout:
-        logger.error(f"Twilio request timed out after {TIMEOUT_TWILIO}s for {e164}")
+        logger.error(f"Abstract API request timed out after {TIMEOUT_ABSTRACT}s for {e164}")
         return RespOrgResult("", "Timeout", "", "", False)
 
     except req.exceptions.ConnectionError as e:
-        logger.error(f"Network connection error during Twilio lookup: {e}")
+        logger.error(f"Network connection error: {e}")
         return RespOrgResult("", "Connection Error", "", "", False)
 
     except req.exceptions.HTTPError as e:
-        logger.error(f"Twilio HTTP error: {e} — Response: {response.text}")
+        logger.error(f"Abstract API HTTP error: {e}")
         return RespOrgResult("", "HTTP Error", "", "", False)
 
     except Exception as e:
-        logger.exception(f"Unexpected error during Twilio lookup for {e164}: {e}")
+        logger.exception(f"Unexpected error during Abstract API lookup for {e164}: {e}")
         return RespOrgResult("", "Unknown Carrier", "", "", False)
 
 
@@ -212,12 +249,11 @@ else:
 
 
 def extract_campaign_data(url: str) -> dict:
-    """Extract campaign ID and other tracking params from URL - handles ANY parameter names."""
+    """Extract campaign ID and other tracking params from URL."""
     try:
         parsed = urlparse(url)
         params = parse_qs(parsed.query)
-        
-        # Common campaign ID parameter names across different platforms
+
         campaign_id_keys = [
             "bcid", "cid", "campaign_id", "gad_campaignid", "campaignid",
             "utm_campaign", "campaign", "click_id", "clickid", "aff_id",
@@ -229,31 +265,26 @@ def extract_campaign_data(url: str) -> dict:
             "fbclid", "gclid", "wbraid", "gbraid", "msclkid",
             "utm_source", "utm_medium", "utm_content", "utm_term",
         ]
-        
-        # Find first matching campaign ID parameter
+
         campaign_id = ""
         for key in campaign_id_keys:
             if key in params:
                 campaign_id = params[key][0]
                 break
-        
-        # If no standard key found, look for any parameter that looks like an ID
-        # (contains numbers and is reasonably long)
+
         if not campaign_id:
             for key, values in params.items():
                 value = values[0]
-                # Check if value looks like an ID (has numbers, not too short)
                 if len(value) > 8 and any(c.isdigit() for c in value):
                     campaign_id = value
                     break
-        
-        # Extract phone number from URL if present
+
         phone_in_url = ""
         url_text = url.replace("-", "").replace(" ", "")
         phone_match = re.search(r'(1?)([2-9]\d{2})(\d{3})(\d{4})', url_text)
         if phone_match:
             phone_in_url = phone_match.group(0)
-        
+
         return {
             "campaign_id": campaign_id,
             "lp_key": params.get("lpkey", [""])[0],
@@ -261,7 +292,7 @@ def extract_campaign_data(url: str) -> dict:
             "domain": parsed.netloc,
             "path": parsed.path,
             "phone_in_url": phone_in_url,
-            "all_params": {k: v[0] for k, v in params.items()},  # Debug: all params
+            "all_params": {k: v[0] for k, v in params.items()},
         }
     except Exception as e:
         logger.error(f"Campaign data extraction failed: {e}")

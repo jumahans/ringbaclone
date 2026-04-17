@@ -118,9 +118,10 @@ SCAM_SLAYER_REPLY_EMAIL = os.getenv("SCAM_SLAYER_REPLY_EMAIL", EMAIL_HOST_USER)
 SCAM_SLAYER_API_KEY = os.getenv("SCAM_SLAYER_API_KEY", "changeme")
 
 # RespOrg
-RESPORG_BACKEND = os.getenv("RESPORG_BACKEND", "twilio")
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+# RespOrg
+RESPORG_BACKEND = os.getenv("RESPORG_BACKEND", "abstract")
+ABSTRACT_API_KEY = os.getenv("ABSTRACT_API_KEY", "")
+
 
 SCREENSHOTS_DIR = BASE_DIR / "media" / "screenshots"
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)

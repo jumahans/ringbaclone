@@ -19,6 +19,7 @@ from reports.schemas import (
     ReportActionOut,
     PaginatedReports,
     LookupIn,
+    LookupOut,
 )
 from reports.tasks import process_resporg_lookup, process_report_complaint, submit_to_authorities
 from reports.services.resporg import lookup_resporg, extract_phone_from_url, normalize_phone, extract_campaign_data
@@ -194,18 +195,18 @@ def update_status(request, report_id: UUID, status: str):
         "new_status": status,
     }
 
-@router.post("/lookup", auth=auth, tags=["Lookup"])
+@router.post("/lookup", response=LookupOut, auth=auth, tags=["Lookup"])
 def lookup(request, payload: LookupIn):
     import uuid
 
     user_input = payload.input.strip()
     is_url = payload.is_url
 
-    # PHONE NUMBER: Direct Twilio lookup, NO CELERY
+    # PHONE NUMBER: Direct Abstract API lookup, NO CELERY
     if not is_url:
         phone = normalize_phone(user_input)
-        result = lookup_resporg(phone)  # Direct call, instant response
-        
+        result = lookup_resporg(phone)
+
         return {
             "lookup_id": "",
             "phone_number": phone,
@@ -216,18 +217,34 @@ def lookup(request, payload: LookupIn):
             "is_toll_free": result.is_toll_free,
             "campaign_id": "",
             "domain": "",
-            "scraping": False,  # No scraping needed for phone
+            "scraping": False,
+            "line_type": result.line_type,
+            "is_valid": result.is_valid,
+            "is_voip": result.is_voip,
+            "country": result.country,
+            "region": result.region,
+            "city": result.city,
+            "timezone": result.timezone,
+            "international_format": result.international_format,
+            "national_format": result.national_format,
+            "risk_level": result.risk_level,
+            "is_disposable": result.is_disposable,
+            "is_abuse_detected": result.is_abuse_detected,
+            "line_status": result.line_status,
+            "sms_email": result.sms_email,
+            "sms_domain": result.sms_domain,
+            "mcc": result.mcc,
+            "mnc": result.mnc,
         }
-    
+
     # URL: Campaign data direct, phone scraping via CELERY
     else:
-        campaign_data = extract_campaign_data(user_input)  # Direct, no Celery
+        campaign_data = extract_campaign_data(user_input)
         lookup_id = str(uuid.uuid4())
-        
-        # Fire Playwright scraping in background via Celery ONLY
+
         from reports.tasks import scrape_phone_from_url
         scrape_phone_from_url.delay(user_input, lookup_id)
-        
+
         return {
             "lookup_id": lookup_id,
             "phone_number": "",
@@ -238,5 +255,66 @@ def lookup(request, payload: LookupIn):
             "is_toll_free": False,
             "campaign_id": campaign_data.get("campaign_id", ""),
             "domain": campaign_data.get("domain", ""),
-            "scraping": True,  # Frontend waits for WebSocket
+            "scraping": True,
+            "line_type": "",
+            "is_valid": False,
+            "is_voip": False,
+            "country": "",
+            "region": "",
+            "city": "",
+            "timezone": "",
+            "international_format": "",
+            "national_format": "",
+            "risk_level": "",
+            "is_disposable": False,
+            "is_abuse_detected": False,
+            "line_status": "",
+            "sms_email": "",
+            "sms_domain": "",
+            "mcc": "",
+            "mnc": "",
         }
+
+import os
+from django.http import FileResponse
+from ninja.errors import HttpError
+
+@router.get("/reports/{report_id}/screenshots/ftc", auth=auth, tags=["Screenshots"])
+def get_ftc_screenshot(request, report_id: UUID):
+    """Serve FTC submission screenshot."""
+    report = get_object_or_404(ScamReport, id=report_id)
+    
+    if not report.ftc_screenshot or not os.path.exists(report.ftc_screenshot):
+        raise HttpError(404, "FTC screenshot not found")
+    
+    return FileResponse(open(report.ftc_screenshot, 'rb'), content_type='image/png')
+
+
+@router.get("/reports/{report_id}/screenshots/ic3", auth=auth, tags=["Screenshots"])
+def get_ic3_screenshot(request, report_id: UUID):
+    """Serve IC3 submission screenshot."""
+    report = get_object_or_404(ScamReport, id=report_id)
+    
+    if not report.ic3_screenshot or not os.path.exists(report.ic3_screenshot):
+        raise HttpError(404, "IC3 screenshot not found")
+    
+    return FileResponse(open(report.ic3_screenshot, 'rb'), content_type='image/png')
+
+
+@router.get("/reports/{report_id}/screenshots", auth=auth, tags=["Screenshots"])
+def get_all_screenshots(request, report_id: UUID):
+    """Get list of available screenshots for a report."""
+    report = get_object_or_404(ScamReport, id=report_id)
+    
+    screenshots = {
+        "ftc": {
+            "available": bool(report.ftc_screenshot and os.path.exists(report.ftc_screenshot)),
+            "url": f"/api/v1/reports/{report_id}/screenshots/ftc" if report.ftc_screenshot else None,
+        },
+        "ic3": {
+            "available": bool(report.ic3_screenshot and os.path.exists(report.ic3_screenshot)),
+            "url": f"/api/v1/reports/{report_id}/screenshots/ic3" if report.ic3_screenshot else None,
+        },
+    }
+    
+    return screenshots
