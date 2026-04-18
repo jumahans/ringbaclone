@@ -182,7 +182,9 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
         ws.close();
       }
     };
-    ws.onerror = () => setScraping(false);
+    ws.onerror = (e) => {
+      console.error("WS error:", e);
+    };
   };
 
   useEffect(() => {
