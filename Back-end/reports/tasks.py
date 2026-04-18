@@ -140,19 +140,18 @@ import threading
 def run_scrape_in_background(url: str, lookup_id: str):
     def scrape():
         from reports.services.resporg import extract_phone_from_url, lookup_resporg
-        
+        from django.core.cache import cache
+
         logger.info(f"[SCRAPE] Starting scrape for URL: {url}")
-        
+
         phone = extract_phone_from_url(url)
-        logger.error(f"[SCRAPE] URL={url} | phone extracted={repr(phone)}")
-        
+
         if phone:
             logger.info(f"[SCRAPE] Phone found: {phone} — running IPQS lookup")
             result = lookup_resporg(phone)
-            logger.info(f"[SCRAPE] Lookup complete: carrier={result.carrier_name}, type={result.line_type}")
-            broadcast_update({
-                "type": "lookup_result",
-                "lookup_id": lookup_id,
+            logger.info(f"[SCRAPE] Lookup complete: carrier={result.carrier_name}")
+            cache.set(f"lookup_{lookup_id}", {
+                "done": True,
                 "phone_number": phone,
                 "carrier_name": result.carrier_name,
                 "resporg_code": result.resporg_code,
@@ -160,27 +159,26 @@ def run_scrape_in_background(url: str, lookup_id: str):
                 "is_toll_free": result.is_toll_free,
                 "line_type": result.line_type,
                 "is_valid": result.is_valid,
-                "is_voip": result.is_voip,
+                "is_voip": result.is_voip or False,
                 "country": result.country,
                 "region": result.region,
                 "city": result.city,
                 "timezone": result.timezone,
-                "international_format": result.international_format,
-                "national_format": result.national_format,
+                "international_format": result.international_format or "",
+                "national_format": result.national_format or "",
                 "risk_level": result.risk_level,
-                "is_disposable": result.is_disposable,
-                "is_abuse_detected": result.is_abuse_detected,
+                "is_disposable": result.is_disposable or False,
+                "is_abuse_detected": result.is_abuse_detected or False,
                 "line_status": result.line_status,
                 "sms_email": result.sms_email,
                 "sms_domain": result.sms_domain,
                 "mcc": result.mcc,
                 "mnc": result.mnc,
-            })
+            }, timeout=300)
         else:
             logger.warning(f"[SCRAPE] No phone number found on page: {url}")
-            broadcast_update({
-                "type": "lookup_result",
-                "lookup_id": lookup_id,
+            cache.set(f"lookup_{lookup_id}", {
+                "done": True,
                 "phone_number": "",
                 "carrier_name": "",
                 "resporg_code": "",
@@ -203,8 +201,8 @@ def run_scrape_in_background(url: str, lookup_id: str):
                 "sms_domain": "",
                 "mcc": "",
                 "mnc": "",
-            })
-    
+            }, timeout=300)
+
     thread = threading.Thread(target=scrape, daemon=True)
     thread.start()
 # Phase 3: Authority Reporting Tasks

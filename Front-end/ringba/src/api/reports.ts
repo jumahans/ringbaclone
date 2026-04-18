@@ -50,7 +50,12 @@ export const reportsApi = {
   },
 
   lookup: async (data: { input: string; is_url: boolean }): Promise<any> => {
-  const res = await client.post("/v1/lookup", data);
-  return res.data;
+    const res = await client.post("/v1/lookup", data);
+    return res.data;
+  },
+
+  getLookupResult: async (lookupId: string): Promise<any> => {
+    const res = await client.get(`/v1/lookup/${lookupId}/result`);
+    return res.data;
   },
 };

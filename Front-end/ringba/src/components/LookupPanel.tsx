@@ -113,7 +113,8 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
   const [scraping, setScraping] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState("");
-  const wsRef = useRef<WebSocket | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isUrl = (val: string) =>
     val.startsWith("http://") || val.startsWith("https://");
@@ -132,7 +133,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
       setResult(res);
       if (res.scraping && res.lookup_id) {
         setScraping(true);
-        listenForPhoneNumber(res.lookup_id);
+        pollForResult(res.lookup_id);
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || "Lookup failed.");
@@ -141,54 +142,66 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
     }
   };
 
-  const listenForPhoneNumber = (lookupId: string) => {
-    const token = localStorage.getItem("access_token");
-    const wsBase = import.meta.env.VITE_WS_URL || "wss://scam-slayer-api.onrender.com";
-    const ws = new WebSocket(`${wsBase}/ws/reports/?token=${token}`);
-    // const ws = new WebSocket(`ws://127.0.0.1:8000/ws/reports/?token=${token}`);
-    wsRef.current = ws;
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "lookup_result" && data.lookup_id === lookupId) {
-        setResult((prev) =>
-          prev ? {
-            ...prev,
-            phone_number: data.phone_number,
-            carrier_name: data.carrier_name,
-            resporg_code: data.resporg_code,
-            abuse_email: data.abuse_email,
-            is_toll_free: data.is_toll_free,
-            line_type: data.line_type,
-            is_valid: data.is_valid,
-            is_voip: data.is_voip,
-            country: data.country,
-            region: data.region,
-            city: data.city,
-            timezone: data.timezone,
-            international_format: data.international_format,
-            national_format: data.national_format,
-            risk_level: data.risk_level,
-            is_disposable: data.is_disposable,
-            is_abuse_detected: data.is_abuse_detected,
-            line_status: data.line_status,
-            sms_email: data.sms_email,
-            sms_domain: data.sms_domain,
-            mcc: data.mcc,
-            mnc: data.mnc,
-            scraping: false,
-          } : prev
-        );
+  const pollForResult = (lookupId: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await reportsApi.getLookupResult(lookupId);
+        if (res.done) {
+          clearInterval(interval);
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          setResult((prev) =>
+            prev ? {
+              ...prev,
+              phone_number: res.phone_number,
+              carrier_name: res.carrier_name,
+              resporg_code: res.resporg_code,
+              abuse_email: res.abuse_email,
+              is_toll_free: res.is_toll_free,
+              line_type: res.line_type,
+              is_valid: res.is_valid,
+              is_voip: res.is_voip,
+              country: res.country,
+              region: res.region,
+              city: res.city,
+              timezone: res.timezone,
+              international_format: res.international_format,
+              national_format: res.national_format,
+              risk_level: res.risk_level,
+              is_disposable: res.is_disposable,
+              is_abuse_detected: res.is_abuse_detected,
+              line_status: res.line_status,
+              sms_email: res.sms_email,
+              sms_domain: res.sms_domain,
+              mcc: res.mcc,
+              mnc: res.mnc,
+              scraping: false,
+            } : prev
+          );
+          setScraping(false);
+        }
+      } catch (err) {
+        clearInterval(interval);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setScraping(false);
-        ws.close();
       }
-    };
-    ws.onerror = (e) => {
-      console.error("WS error:", e);
-    };
+    }, 2000);
+
+    pollRef.current = interval;
+
+    // Stop polling after 3 minutes max
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      setScraping(false);
+    }, 180000);
+
+    timeoutRef.current = timeout;
   };
 
   useEffect(() => {
-    return () => { wsRef.current?.close(); };
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
   const handleSubmit = () => {
@@ -277,17 +290,17 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
             <div>
               <SectionHeader icon={Phone} title="Phone Identity" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <Field 
-                    label="Phone Number" 
-                    value={
-                        scraping 
-                            ? "Scraping..." 
-                            : result.phone_number 
-                                ? result.phone_number 
-                                : "No phone number found on this page"
-                    } 
-                    mono 
-                    loading={scraping && !result.phone_number} 
+                <Field
+                  label="Phone Number"
+                  value={
+                    scraping
+                      ? "Scraping..."
+                      : result.phone_number
+                        ? result.phone_number
+                        : "No phone number found on this page"
+                  }
+                  mono
+                  loading={scraping && !result.phone_number}
                 />
                 <Field label="International" value={result.international_format} mono />
                 <Field label="National" value={result.national_format} mono />

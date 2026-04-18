@@ -81,6 +81,7 @@ class LookupIn(Schema):
 from typing import Optional
 
 class LookupOut(Schema):
+    done: bool = False
     lookup_id: str
     phone_number: str
     carrier_name: str

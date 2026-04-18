@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TIMEOUT_ABSTRACT = 10
-TIMEOUT_PLAYWRIGHT = 60
+TIMEOUT_PLAYWRIGHT = 120
 
 
 @dataclass

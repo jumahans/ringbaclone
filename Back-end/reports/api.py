@@ -310,7 +310,41 @@ def lookup(request, payload: LookupIn):
             "mcc": "",
             "mnc": "",
         }
+@router.get("/lookup/{lookup_id}/result", auth=auth, tags=["Lookup"])
+def lookup_result(request, lookup_id: str):
+    from django.core.cache import cache
+    from ninja.errors import HttpError
 
+    data = cache.get(f"lookup_{lookup_id}")
+
+    if not data:
+        return {
+            "done": False,
+            "phone_number": "",
+            "carrier_name": "",
+            "resporg_code": "",
+            "abuse_email": "",
+            "is_toll_free": False,
+            "line_type": "",
+            "is_valid": False,
+            "is_voip": False,
+            "country": "",
+            "region": "",
+            "city": "",
+            "timezone": "",
+            "international_format": "",
+            "national_format": "",
+            "risk_level": "",
+            "is_disposable": False,
+            "is_abuse_detected": False,
+            "line_status": "",
+            "sms_email": "",
+            "sms_domain": "",
+            "mcc": "",
+            "mnc": "",
+        }
+
+    return data
 import os
 from django.http import FileResponse
 from ninja.errors import HttpError
