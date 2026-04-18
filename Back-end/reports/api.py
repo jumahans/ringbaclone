@@ -276,8 +276,10 @@ def lookup(request, payload: LookupIn):
                 "mnc": result.mnc,
             }
 
-        from reports.tasks import scrape_phone_from_url
-        scrape_phone_from_url.delay(user_input, lookup_id)
+        # from reports.tasks import scrape_phone_from_url
+        # scrape_phone_from_url.delay(user_input, lookup_id)
+        from reports.tasks import run_scrape_in_background
+        run_scrape_in_background(user_input, lookup_id)
 
         return {
             "lookup_id": lookup_id,

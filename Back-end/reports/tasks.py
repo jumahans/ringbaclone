@@ -135,7 +135,78 @@ def scrape_phone_from_url(url: str, lookup_id: str):
             "is_toll_free": False,
         })
 
+import threading
 
+def run_scrape_in_background(url: str, lookup_id: str):
+    def scrape():
+        from reports.services.resporg import extract_phone_from_url, lookup_resporg
+        
+        logger.info(f"[SCRAPE] Starting scrape for URL: {url}")
+        
+        phone = extract_phone_from_url(url)
+        logger.error(f"[SCRAPE] URL={url} | phone extracted={repr(phone)}")
+        
+        if phone:
+            logger.info(f"[SCRAPE] Phone found: {phone} — running IPQS lookup")
+            result = lookup_resporg(phone)
+            logger.info(f"[SCRAPE] Lookup complete: carrier={result.carrier_name}, type={result.line_type}")
+            broadcast_update({
+                "type": "lookup_result",
+                "lookup_id": lookup_id,
+                "phone_number": phone,
+                "carrier_name": result.carrier_name,
+                "resporg_code": result.resporg_code,
+                "abuse_email": result.abuse_email,
+                "is_toll_free": result.is_toll_free,
+                "line_type": result.line_type,
+                "is_valid": result.is_valid,
+                "is_voip": result.is_voip,
+                "country": result.country,
+                "region": result.region,
+                "city": result.city,
+                "timezone": result.timezone,
+                "international_format": result.international_format,
+                "national_format": result.national_format,
+                "risk_level": result.risk_level,
+                "is_disposable": result.is_disposable,
+                "is_abuse_detected": result.is_abuse_detected,
+                "line_status": result.line_status,
+                "sms_email": result.sms_email,
+                "sms_domain": result.sms_domain,
+                "mcc": result.mcc,
+                "mnc": result.mnc,
+            })
+        else:
+            logger.warning(f"[SCRAPE] No phone number found on page: {url}")
+            broadcast_update({
+                "type": "lookup_result",
+                "lookup_id": lookup_id,
+                "phone_number": "",
+                "carrier_name": "",
+                "resporg_code": "",
+                "abuse_email": "",
+                "is_toll_free": False,
+                "line_type": "",
+                "is_valid": False,
+                "is_voip": False,
+                "country": "",
+                "region": "",
+                "city": "",
+                "timezone": "",
+                "international_format": "",
+                "national_format": "",
+                "risk_level": "",
+                "is_disposable": False,
+                "is_abuse_detected": False,
+                "line_status": "",
+                "sms_email": "",
+                "sms_domain": "",
+                "mcc": "",
+                "mnc": "",
+            })
+    
+    thread = threading.Thread(target=scrape, daemon=True)
+    thread.start()
 # Phase 3: Authority Reporting Tasks
 
 @shared_task(time_limit=120, soft_time_limit=90)

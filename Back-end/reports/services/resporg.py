@@ -173,23 +173,19 @@ with sync_playwright() as p:
         locale="en-US",
     )
     page = context.new_page()
+
+    # Block images, fonts, CSS — speeds up load significantly
+    page.route("**/*.{png,jpg,jpeg,gif,svg,css,woff,woff2,ttf,eot}", lambda route: route.abort())
+
     page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
     phone = ""
     
     try:
-        page.goto(url, timeout=15000, wait_until="domcontentloaded")
-        page.wait_for_timeout(5000)
+        # commit fires on first byte — much faster than domcontentloaded
+        page.goto(url, timeout=15000, wait_until="commit")
 
-        try:
-            proceed = page.locator("text=Ignore & Proceed")
-            if proceed.count() > 0:
-                proceed.click()
-                page.wait_for_timeout(3000)
-        except:
-            pass
-
-        # 1. Check tel: links first - most reliable
+        # 1. Check tel: links immediately — no wait
         tel_links = page.eval_on_selector_all(
             "a[href^='tel:']",
             "els => els.map(e => e.href)"
@@ -202,6 +198,10 @@ with sync_playwright() as p:
                     phone = digits
                     break
 
+        # Only wait if tel: links found nothing
+        if not phone:
+            page.wait_for_timeout(1500)
+
         # 2. Check page HTML for tel: patterns
         if not phone:
             html = page.content()
@@ -211,16 +211,16 @@ with sync_playwright() as p:
 
         # 3. Check JavaScript variables
         if not phone:
-                    js_phone = page.evaluate(
-                        "() => {"
-                        "const pattern = /(1?(800|833|844|855|866|877|888)[\\s.-]?\\d{3}[\\s.-]?\\d{4})/;"
-                        "const text = document.documentElement.innerHTML;"
-                        "const match = pattern.exec(text);"
-                        "return match ? match[0] : null;"
-                        "}"
-                    )
-                    if js_phone:
-                        phone = re.sub(r'\D', '', js_phone)
+            js_phone = page.evaluate(
+                "() => {"
+                "const pattern = /(1?(800|833|844|855|866|877|888)[\\s.-]?\\d{3}[\\s.-]?\\d{4})/;"
+                "const text = document.documentElement.innerHTML;"
+                "const match = pattern.exec(text);"
+                "return match ? match[0] : null;"
+                "}"
+            )
+            if js_phone:
+                phone = re.sub(r'\D', '', js_phone)
 
         # 4. Check body text
         if not phone:
@@ -231,19 +231,22 @@ with sync_playwright() as p:
 
         # 5. Check meta tags
         if not phone:
-                    meta_content = page.evaluate(
-                        "() => {"
-                        "const metas = document.querySelectorAll('meta');"
-                        "return Array.from(metas).map(m => m.getAttribute('content') || '').join(' ');"
-                        "}"
-                    )
-                    full = TOLL_FREE_PATTERN.search(meta_content or "")
-                    if full:
-                        phone = re.sub(r'\D', '', full.group())
+            meta_content = page.evaluate(
+                "() => {"
+                "const metas = document.querySelectorAll('meta');"
+                "return Array.from(metas).map(m => m.getAttribute('content') || '').join(' ');"
+                "}"
+            )
+            full = TOLL_FREE_PATTERN.search(meta_content or "")
+            if full:
+                phone = re.sub(r'\D', '', full.group())
 
     except Exception as e:
-        pass
+            import sys
+            print(f"DEBUG ERROR: {e}", file=sys.stderr)
     
+    import sys
+    print(f"DEBUG body text sample: {repr(page.inner_text('body')[:300]) if phone == '' else 'phone found'}", file=sys.stderr)
     browser.close()
     print(phone)
 """
@@ -251,7 +254,6 @@ with sync_playwright() as p:
     script_file = None
     tmp_path = None
     try:
-        # Write script to temp .py file — fixes all escape sequence issues
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as sf:
             sf.write(script_content)
             script_file = sf.name
@@ -405,22 +407,29 @@ def extract_campaign_data(url: str) -> dict:
                     campaign_id = value
                     break
 
-        phone_in_url = ""
-        url_text = url.replace("-", "").replace(" ", "")
-        phone_match = re.search(r'(1?)([2-9]\d{2})(\d{3})(\d{4})', url_text)
-        if phone_match:
-            phone_in_url = phone_match.group(0)
 
-        # Check all param values for phone numbers
-        if not phone_in_url:
-            for key, values in params.items():
-                value = values[0]
-                digits = re.sub(r'\D', '', value)
-                if len(digits) >= 10:
-                    prefix = digits[-10:][:3]
-                    if prefix in ("800", "833", "844", "855", "866", "877", "888"):
-                        phone_in_url = digits
-                        break
+        non_phone_keys = {
+            "utm_id", "utm_campaign", "utm_source", "utm_medium", "utm_content",
+            "utm_term", "gad_campaignid", "gad_source", "gclid", "fbclid",
+            "msclkid", "ttclid", "campaign_id", "campaignid", "cid", "bcid",
+            "adid", "ad_id", "wbraid", "gbraid", "twclid", "li_fat_id",
+            "epik", "qclid", "_event", "event", "session_id", "visitor_id",
+            "tracking_id", "click_id", "clickid", "subid", "sub_id",
+        }
+
+        phone_in_url = ""
+
+        # First check param values for toll-free numbers
+        for key, values in params.items():
+            if key.lower() in non_phone_keys:
+                continue
+            value = values[0]
+            digits = re.sub(r'\D', '', value)
+            if 10 <= len(digits) <= 11:
+                prefix = digits[-10:][:3]
+                if prefix in ("800", "833", "844", "855", "866", "877", "888"):
+                    phone_in_url = digits
+                    break
 
         return {
             "campaign_id": campaign_id,

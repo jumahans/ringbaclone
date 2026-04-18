@@ -273,7 +273,18 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
             <div>
               <SectionHeader icon={Phone} title="Phone Identity" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <Field label="Phone Number" value={result.phone_number || "Scraping..."} mono loading={scraping && !result.phone_number} />
+                <Field 
+                    label="Phone Number" 
+                    value={
+                        scraping 
+                            ? "Scraping..." 
+                            : result.phone_number 
+                                ? result.phone_number 
+                                : "No phone number found on this page"
+                    } 
+                    mono 
+                    loading={scraping && !result.phone_number} 
+                />
                 <Field label="International" value={result.international_format} mono />
                 <Field label="National" value={result.national_format} mono />
               </div>
