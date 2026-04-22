@@ -88,7 +88,7 @@ def lookup_resporg(phone: str) -> RespOrgResult:
         line_type = data.get("line_type", "")
         is_valid = data.get("valid", False)
         is_voip = data.get("VOIP", False)
-        is_toll_free = line_type.lower() in ("toll_free", "tollfree") if line_type else False
+        is_toll_free = line_type.lower() in ("toll free", "toll_free", "tollfree") if line_type else False
         country = data.get("country", "")
         region = data.get("region", "")
         city = data.get("city", "")
@@ -184,6 +184,12 @@ with sync_playwright() as p:
     try:
         # commit fires on first byte — much faster than domcontentloaded
         page.goto(url, timeout=15000, wait_until="commit")
+        page_text = page.inner_text("body") if page.locator("body").count() > 0 else ""
+        down_indicators = ["page not found", "404", "not found", "this site can't be reached", "azure front door", "suspended", "no longer available"]
+        if any(ind in page_text.lower() for ind in down_indicators):
+            print("__PAGE_DOWN__")
+            browser.close()
+            sys.exit(0)
 
         # 1. Check tel: links immediately — no wait
         tel_links = page.eval_on_selector_all(

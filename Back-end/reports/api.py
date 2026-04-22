@@ -2,7 +2,7 @@ import os
 from typing import Optional
 from uuid import UUID
 from datetime import timedelta
-
+import threading
 from ninja import Router
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -96,7 +96,7 @@ def create_report(request, payload: ScamReportIn):
         detail=f"Submitted by {payload.submitted_by}",
     )
 
-    process_resporg_lookup.delay(str(report.id))
+    threading.Thread(target=process_resporg_lookup, args=(str(report.id),), daemon=True).start()
 
     report.refresh_from_db()
     return report
@@ -137,10 +137,8 @@ def trigger_report(request, report_id: UUID):
         }
 
     # Phase 1 & 2: Carrier abuse email
-    process_report_complaint.delay(str(report.id))
-    
-    # Phase 3: Authorities (FTC, IC3, brand teams, Google)
-    submit_to_authorities.delay(str(report.id))
+    threading.Thread(target=process_report_complaint, args=(str(report.id),), daemon=True).start()
+    threading.Thread(target=submit_to_authorities, args=(str(report.id),), daemon=True).start()
 
     return {
         "success": True,
@@ -373,6 +371,7 @@ def get_ic3_screenshot(request, report_id: UUID):
 
 @router.get("/reports/{report_id}/screenshots", auth=auth, tags=["Screenshots"])
 def get_all_screenshots(request, report_id: UUID):
+
     """Get list of available screenshots for a report."""
     report = get_object_or_404(ScamReport, id=report_id)
     
@@ -388,3 +387,74 @@ def get_all_screenshots(request, report_id: UUID):
     }
     
     return screenshots
+
+
+
+
+
+
+
+# Add this schema to reports/schemas.py
+
+from ninja import Schema
+from typing import List
+
+class EmailComplaintIn(Schema):
+    to: str
+    cc: List[str] = []
+    subject: str
+    body: str
+
+
+# ─── Add this endpoint to your existing router in reports/api.py ──────────────
+
+@router.post("/reports/{report_id}/email", response=ReportActionOut, auth=auth, tags=["Actions"])
+def send_email_complaint(request, report_id: UUID, payload: EmailComplaintIn):
+    """
+    Send a user-composed carrier complaint email for the given report.
+    The To address, CC list, subject, and body all come from the frontend compose modal.
+    """
+    from reports.services.mailer import send_resporg_complaint
+
+    report = get_object_or_404(ScamReport, id=report_id)
+
+    success, message = send_resporg_complaint(
+        report_id=str(report.id),
+        phone_number=report.phone_number,
+        brand=report.brand,
+        landing_url=report.landing_url,
+        resporg_code=report.resporg_raw or "",
+        carrier_name=report.resporg.carrier_name if report.resporg else "",
+        # ── user-provided overrides ──
+        to_override=payload.to,
+        cc_override=payload.cc,
+        subject_override=payload.subject,
+        body_override=payload.body,
+    )
+
+    if success:
+        report.status = ScamReport.Status.REPORTED
+        report.report_sent_at = timezone.now()
+        report.save()
+
+        ReportLog.objects.create(
+            report=report,
+            action=ReportLog.Action.EMAIL_SENT,
+            detail=f"User-composed email sent to {payload.to} — {message}",
+            success=True,
+        )
+    else:
+        ReportLog.objects.create(
+            report=report,
+            action=ReportLog.Action.EMAIL_SENT,
+            detail=f"Failed: {message}",
+            success=False,
+        )
+
+    return {
+        "success": success,
+        "message": message,
+        "report_id": report.id,
+        "new_status": report.status,
+    }
+

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, get_connection
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,86 @@ Automated Abuse Reporting System
 """.strip()
 
 
+CARRIER_ABUSE_EMAILS = {
+    "somosgov": "abuse@somos.com",
+    "somosco": "abuse@somos.com",
+    "at&t": "abuse@att.net",
+    "verizon": "abuse@verizon.com",
+    "t-mobile": "abuse@t-mobile.com",
+    "tmobile": "abuse@t-mobile.com",
+    "lumen": "abuse@lumen.com",
+    "bandwidth": "abuse@bandwidth.com",
+    "twilio": "abuse@twilio.com",
+    "vonage": "abuse@vonage.com",
+    "google": "abuse@google.com",
+    "telnyx": "abuse@telnyx.com",
+    "fractel": "abuse@fractel.net",
+    "cx support": "abuse@cxsupport.com",
+    "cxsupport": "abuse@cxsupport.com",
+}
+
+# Always CC on every auto-generated complaint
+ALWAYS_CC = [
+    "spam@uce.gov",
+    "ic3@ic3.gov",
+]
+
+# Brand-based CC
+BRAND_CC_EMAILS = {
+    "amazon": "stop-spoofing@amazon.com",
+    "aws": "stop-spoofing@amazon.com",
+    "microsoft": "reportphishing@microsoft.com",
+    "windows": "reportphishing@microsoft.com",
+    "google": "phishing-report@google.com",
+    "apple": "reportphishing@apple.com",
+    "paypal": "phishing@paypal.com",
+    "irs": "phishing@irs.gov",
+    "social security": "oig.hotline@ssa.gov",
+    "ssa": "oig.hotline@ssa.gov",
+    "medicare": "HHSTips@oig.hhs.gov",
+    "bank of america": "abuse@bankofamerica.com",
+    "chase": "phishing@chase.com",
+    "wells fargo": "reportphish@wellsfargo.com",
+}
+
+# URL domain-based CC
+URL_DOMAIN_CC_EMAILS = {
+    "amazon.com": "stop-spoofing@amazon.com",
+    "microsoft.com": "reportphishing@microsoft.com",
+    "google.com": "phishing-report@google.com",
+    "apple.com": "reportphishing@apple.com",
+    "paypal.com": "phishing@paypal.com",
+    "irs.gov": "phishing@irs.gov",
+    "chase.com": "phishing@chase.com",
+    "wellsfargo.com": "reportphish@wellsfargo.com",
+    "bankofamerica.com": "abuse@bankofamerica.com",
+}
+
+
+def get_cc_emails(brand: str, landing_url: str) -> list:
+    """
+    Build the default CC list for auto-generated complaints.
+    Not used for user-composed emails (those pass cc_override).
+    """
+    cc = list(ALWAYS_CC)
+
+    brand_lower = (brand or "").lower()
+    for key, email in BRAND_CC_EMAILS.items():
+        if key in brand_lower:
+            if email not in cc:
+                cc.append(email)
+            break
+
+    url_lower = (landing_url or "").lower()
+    for domain, email in URL_DOMAIN_CC_EMAILS.items():
+        if domain in url_lower:
+            if email not in cc:
+                cc.append(email)
+            break
+
+    return cc
+
+
 def send_resporg_complaint(
     report_id: str,
     phone_number: str,
@@ -47,39 +127,106 @@ def send_resporg_complaint(
     landing_url: str,
     resporg_code: str,
     carrier_name: str,
-    abuse_email: str,
+    # ── fields the user can now override ──────────────────────────────
+    abuse_email: str = "",
+    to_override: str = "",        # user-specified To address
+    cc_override: list | None = None,   # user-specified CC list; None = use defaults
+    subject_override: str = "",   # user-specified subject
+    body_override: str = "",      # user-specified body (full plain-text)
+    # ──────────────────────────────────────────────────────────────────
 ) -> tuple[bool, str]:
-    if not abuse_email:
-        return False, "No abuse email configured for this carrier."
+    """
+    Send a carrier abuse complaint.
+
+    When called from the automated pipeline, abuse_email is resolved from the
+    carrier map and cc/subject/body are generated from the template.
+
+    When called from the user-compose flow, pass:
+      - to_override     → replaces abuse_email as the To address
+      - cc_override     → exact list of CC addresses (skips default CC logic)
+      - subject_override → replaces the auto-generated subject
+      - body_override   → replaces the template body entirely
+    """
+
+    # ── Resolve To address ─────────────────────────────────────────────
+    recipient = to_override.strip() if to_override else abuse_email.strip()
+
+    if not recipient:
+        carrier_lower = carrier_name.lower()
+        for key, email in CARRIER_ABUSE_EMAILS.items():
+            if key in carrier_lower:
+                recipient = email
+                logger.info(f"Using known abuse email for {carrier_name}: {recipient}")
+                break
+
+    if not recipient:
+        return False, "No recipient email address provided or found for this carrier."
 
     if not settings.EMAIL_HOST_USER:
         return False, "Email not configured in settings."
 
     reply_to = settings.SCAM_SLAYER_REPLY_EMAIL or settings.EMAIL_HOST_USER
 
-    body = COMPLAINT_TEMPLATE.format(
-        abuse_email=abuse_email,
-        phone_number=phone_number,
-        brand=brand,
-        resporg_code=resporg_code,
-        carrier_name=carrier_name,
-        landing_url=landing_url or "N/A",
-        date_detected=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-        reply_to=reply_to,
-        report_id=report_id,
+    # ── Resolve CC ────────────────────────────────────────────────────
+    if cc_override is not None:
+        # User explicitly provided their own CC list (may be empty)
+        cc_emails = [e.strip() for e in cc_override if e.strip()]
+    else:
+        # Automated flow: use brand/URL-based defaults
+        cc_emails = get_cc_emails(brand, landing_url)
+
+    logger.info(f"CC emails for report {report_id}: {cc_emails}")
+
+    # ── Resolve Subject ───────────────────────────────────────────────
+    subject = (
+        subject_override.strip()
+        if subject_override
+        else f"[URGENT] Toll-Free Number Abuse — {phone_number}"
     )
 
+    # ── Resolve Body ──────────────────────────────────────────────────
+    body = (
+        body_override.strip()
+        if body_override
+        else COMPLAINT_TEMPLATE.format(
+            abuse_email=recipient,
+            phone_number=phone_number,
+            brand=brand,
+            resporg_code=resporg_code,
+            carrier_name=carrier_name,
+            landing_url=landing_url or "N/A",
+            date_detected=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            reply_to=reply_to,
+            report_id=report_id,
+        )
+    )
+
+    # ── Send ──────────────────────────────────────────────────────────
     try:
+        connection = get_connection(
+            backend="django.core.mail.backends.smtp.EmailBackend",
+            host=settings.EMAIL_HOST,
+            port=settings.EMAIL_PORT,
+            username=settings.EMAIL_HOST_USER,
+            password=settings.EMAIL_HOST_PASSWORD,
+            use_tls=settings.EMAIL_USE_TLS,
+        )
         email = EmailMessage(
-            subject=f"[URGENT] Toll-Free Number Abuse — {phone_number}",
+            subject=subject,
             body=body,
             from_email=settings.EMAIL_HOST_USER,
-            to=[abuse_email],
+            to=[recipient],
+            cc=cc_emails,
             reply_to=[reply_to],
         )
+        email.connection = connection
         email.send(fail_silently=False)
-        logger.info(f"Complaint sent for {phone_number} to {abuse_email}")
-        return True, f"Complaint sent to {abuse_email}"
+        logger.info(
+            f"Complaint sent for {phone_number} to {recipient} CC: {cc_emails}"
+        )
+        return True, f"Complaint sent to {recipient}" + (
+            f" with CC to {', '.join(cc_emails)}" if cc_emails else ""
+        )
     except Exception as e:
         logger.error(f"Failed to send complaint for {phone_number}: {e}")
         return False, str(e)

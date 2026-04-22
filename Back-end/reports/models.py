@@ -41,6 +41,16 @@ class ScamReport(models.Model):
     submitted_by = models.CharField(max_length=100, default="system")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    description = models.TextField(blank=True)
+    reporter_first_name = models.CharField(max_length=100, blank=True)
+    reporter_last_name = models.CharField(max_length=100, blank=True)
+    reporter_address = models.CharField(max_length=200, blank=True)
+    reporter_address2 = models.CharField(max_length=200, blank=True)
+    reporter_city = models.CharField(max_length=100, blank=True)
+    reporter_state = models.CharField(max_length=100, blank=True)
+    reporter_zip = models.CharField(max_length=20, blank=True)
+    reporter_phone = models.CharField(max_length=20, blank=True)
+    reporter_email = models.EmailField(blank=True)
 
     class Meta:
         db_table = "scam_report"

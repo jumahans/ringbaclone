@@ -33,6 +33,7 @@ interface LookupResult {
   sms_domain: string;
   mcc: string;
   mnc: string;
+  page_status?: string;
 }
 
 interface LookupPanelProps {
@@ -174,6 +175,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
               sms_domain: res.sms_domain,
               mcc: res.mcc,
               mnc: res.mnc,
+              page_status: res.page_status,
               scraping: false,
             } : prev
           );
@@ -188,7 +190,6 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
 
     pollRef.current = interval;
 
-    // Stop polling after 3 minutes max
     const timeout = setTimeout(() => {
       clearInterval(interval);
       setScraping(false);
@@ -278,7 +279,11 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
             <span className="text-xs font-medium text-emerald-400 flex items-center gap-2 min-w-0">
               <CheckCircle2 size={13} className="shrink-0" />
               <span className="truncate">
-                {scraping ? "URL identified — scraping for number..." : "Lookup complete"}
+                {scraping
+                  ? "URL identified — scraping for number..."
+                  : result.page_status === "down"
+                    ? "Ad brought down — URL is no longer active"
+                    : "Lookup complete"}
               </span>
             </span>
             {scraping && <Loader size={13} className="animate-spin text-amber-400 shrink-0" />}
@@ -295,12 +300,15 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
                   value={
                     scraping
                       ? "Scraping..."
-                      : result.phone_number
-                        ? result.phone_number
-                        : "No phone number found on this page"
+                      : result.page_status === "down"
+                        ? "🚨 Ad Brought Down"
+                        : result.phone_number
+                          ? result.phone_number
+                          : "No phone number found on this page"
                   }
                   mono
                   loading={scraping && !result.phone_number}
+                  color={result.page_status === "down" ? "red" : undefined}
                 />
                 <Field label="International" value={result.international_format} mono />
                 <Field label="National" value={result.national_format} mono />

@@ -1,0 +1,33 @@
+scraping.py:577:SB
+--------------------------------------------------------------------
+Last Page: https://www.ic3.gov/
+ Duration: 72.73s
+  Browser: Chrome 147.0.7727.101
+   Driver: chromedriver 147.0.7727.57
+Timestamp: 1776804085  (Unix Timestamp)
+     Date: Tuesday, 21 April 2026
+     Time: 11:41:25 PM  (E. Africa Standard Time, UTC+03:00)
+--------------------------------------------------------------------
+Traceback:
+  Traceback (most recent call last):
+  File "C:\Users\Pc\OneDrive\Desktop\ringbaclone\Back-end\scraping.py", line 601, in <module>
+    sb.wait_for_element_visible("button#acceptFile", timeout=15)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Pc\.virtualenvs\Back-end-dNpCmsG8\Lib\site-packages\seleniumbase\fixtures\base_case.py", line 9399, in wait_for_element_visible
+    return page_actions.wait_for_element_visible(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self.driver,
+        ^^^^^^^^^^^^
+    ...<3 lines>...
+        original_selector=original_selector,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Pc\.virtualenvs\Back-end-dNpCmsG8\Lib\site-packages\seleniumbase\fixtures\page_actions.py", line 524, in wait_for_element_visible
+    timeout_exception(ElementNotVisibleException, message)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Pc\.virtualenvs\Back-end-dNpCmsG8\Lib\site-packages\seleniumbase\fixtures\page_actions.py", line 270, in timeout_exception
+    raise exc(msg)
+seleniumbase.common.exceptions.ElementNotVisibleException: Message: 
+ Element {button#acceptFile} was not visible after 15 seconds!
+
