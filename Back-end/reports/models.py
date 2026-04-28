@@ -1,6 +1,7 @@
 from django.db import models
 import uuid
 
+from authentication.models import User
 
 class RespOrg(models.Model):
     code = models.CharField(max_length=10, unique=True)
@@ -38,7 +39,7 @@ class ScamReport(models.Model):
     notes = models.TextField(blank=True)
     ftc_screenshot = models.CharField(max_length=500, blank=True, null=True, default="")
     ic3_screenshot = models.CharField(max_length=500, blank=True, null=True, default="")
-    submitted_by = models.CharField(max_length=100, default="system")
+    submitted_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     description = models.TextField(blank=True)
@@ -51,6 +52,8 @@ class ScamReport(models.Model):
     reporter_zip = models.CharField(max_length=20, blank=True)
     reporter_phone = models.CharField(max_length=20, blank=True)
     reporter_email = models.EmailField(blank=True)
+    
+
 
     class Meta:
         db_table = "scam_report"

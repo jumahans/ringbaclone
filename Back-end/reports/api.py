@@ -9,7 +9,9 @@ from django.utils import timezone
 from django.db.models import Q
 from django.conf import settings
 from authentication.api import AuthBearer
-
+from reports.services.traffic import extract_traffic_source
+import logging
+logger = logging.getLogger(__name__)
 from reports.models import ScamReport, RespOrg, ReportLog
 from reports.schemas import (
     ScamReportIn,
@@ -49,7 +51,8 @@ def list_reports(
     status: Optional[str] = None,
     search: Optional[str] = None,
 ):
-    qs = ScamReport.objects.select_related("resporg").all()
+    user = request.user
+    qs = ScamReport.objects.filter(submitted_by=user)
 
     if status:
         qs = qs.filter(status=status)
@@ -86,14 +89,14 @@ def create_report(request, payload: ScamReportIn):
         phone_number=digits,
         landing_url=payload.landing_url or "",
         notes=payload.notes or "",
-        submitted_by=payload.submitted_by or "api",
+        submitted_by=request.user,
         status=ScamReport.Status.PENDING,
     )
 
     ReportLog.objects.create(
         report=report,
         action=ReportLog.Action.CREATED,
-        detail=f"Submitted by {payload.submitted_by}",
+        detail=f"Submitted by {request.user.email}",
     )
 
     threading.Thread(target=process_resporg_lookup, args=(str(report.id),), daemon=True).start()
@@ -116,7 +119,7 @@ def get_report(request, report_id: UUID):
         "report_sent_at": report.report_sent_at,
         "screenshot_path": report.screenshot_path,
         "notes": report.notes,
-        "submitted_by": report.submitted_by,
+        "submitted_by": report.submitted_by.email if report.submitted_by else "",
         "created_at": report.created_at,
         "updated_at": report.updated_at,
         "logs": list(logs),
@@ -137,7 +140,7 @@ def trigger_report(request, report_id: UUID):
         }
 
     # Phase 1 & 2: Carrier abuse email
-    threading.Thread(target=process_report_complaint, args=(str(report.id),), daemon=True).start()
+    # threading.Thread(target=process_report_complaint, args=(str(report.id),), daemon=True).start()
     threading.Thread(target=submit_to_authorities, args=(str(report.id),), daemon=True).start()
 
     return {
@@ -213,6 +216,7 @@ def lookup(request, payload: LookupIn):
             "abuse_email": result.abuse_email,
             "landing_url": "",
             "is_toll_free": result.is_toll_free,
+            "company_name": result.company_name,
             "campaign_id": "",
             "domain": "",
             "scraping": False,
@@ -237,7 +241,7 @@ def lookup(request, payload: LookupIn):
 
     # URL: Campaign data direct, phone scraping via CELERY
     else:
-        campaign_data = extract_campaign_data(user_input)
+        campaign_data = extract_campaign_data(user_input)   
         lookup_id = str(uuid.uuid4())
 
         phone_in_url = campaign_data.get("phone_in_url", "")
@@ -248,6 +252,7 @@ def lookup(request, payload: LookupIn):
                 "lookup_id": lookup_id,
                 "phone_number": phone_in_url,
                 "carrier_name": result.carrier_name,
+                "company_name": result.company_name,
                 "resporg_code": result.resporg_code,
                 "abuse_email": result.abuse_email,
                 "landing_url": user_input,
@@ -272,11 +277,32 @@ def lookup(request, payload: LookupIn):
                 "sms_domain": result.sms_domain,
                 "mcc": result.mcc,
                 "mnc": result.mnc,
+                "traffic_source": "",
+                "ad_platform":    "",
+                "click_id":       "",
+                "utm_source":     "",
+                "utm_medium":     "",
+                "utm_campaign":   "",
+                "utm_content":    "",
+                "utm_term":       "",
+                "publisher_id":   "",
+                "sub_id":         "",
+                "referrer":       "",
             }
 
         # from reports.tasks import scrape_phone_from_url
         # scrape_phone_from_url.delay(user_input, lookup_id)
         from reports.tasks import run_scrape_in_background
+
+        def run_traffic_background():
+            from django.core.cache import cache
+            traffic = extract_traffic_source(user_input)
+            logger.info(f"[TRAFFIC RESULT] {traffic}")
+            existing = cache.get(f"lookup_{lookup_id}") or {}
+            existing.update(traffic)
+            cache.set(f"lookup_{lookup_id}", existing, timeout=300)
+
+        threading.Thread(target=run_traffic_background, daemon=True).start()
         run_scrape_in_background(user_input, lookup_id)
 
         return {
@@ -318,6 +344,7 @@ def lookup_result(request, lookup_id: str):
     if not data:
         return {
             "done": False,
+            "company_name": "",
             "phone_number": "",
             "carrier_name": "",
             "resporg_code": "",
@@ -340,6 +367,7 @@ def lookup_result(request, lookup_id: str):
             "sms_domain": "",
             "mcc": "",
             "mnc": "",
+            
         }
 
     return data
@@ -392,18 +420,23 @@ def get_all_screenshots(request, report_id: UUID):
 
 
 
-
-
 # Add this schema to reports/schemas.py
 
 from ninja import Schema
-from typing import List
+from typing import List, Optional
+
+class EmailAttachmentIn(Schema):
+    name: str
+    type: str
+    data: str  # base64
 
 class EmailComplaintIn(Schema):
     to: str
     cc: List[str] = []
+    bcc: List[str] = []
     subject: str
     body: str
+    attachments: List[EmailAttachmentIn] = []
 
 
 # ─── Add this endpoint to your existing router in reports/api.py ──────────────
@@ -412,7 +445,7 @@ class EmailComplaintIn(Schema):
 def send_email_complaint(request, report_id: UUID, payload: EmailComplaintIn):
     """
     Send a user-composed carrier complaint email for the given report.
-    The To address, CC list, subject, and body all come from the frontend compose modal.
+    The To address, CC list, subject, body, and image attachments all come from the frontend.
     """
     from reports.services.mailer import send_resporg_complaint
 
@@ -425,11 +458,12 @@ def send_email_complaint(request, report_id: UUID, payload: EmailComplaintIn):
         landing_url=report.landing_url,
         resporg_code=report.resporg_raw or "",
         carrier_name=report.resporg.carrier_name if report.resporg else "",
-        # ── user-provided overrides ──
         to_override=payload.to,
         cc_override=payload.cc,
+        bcc_override=payload.bcc,
         subject_override=payload.subject,
         body_override=payload.body,
+        attachments=[a.dict() for a in payload.attachments],
     )
 
     if success:
@@ -440,7 +474,7 @@ def send_email_complaint(request, report_id: UUID, payload: EmailComplaintIn):
         ReportLog.objects.create(
             report=report,
             action=ReportLog.Action.EMAIL_SENT,
-            detail=f"User-composed email sent to {payload.to} — {message}",
+            detail=f"User-composed email sent to {payload.to} with {len(payload.attachments)} attachment(s) — {message}",
             success=True,
         )
     else:
@@ -458,3 +492,53 @@ def send_email_complaint(request, report_id: UUID, payload: EmailComplaintIn):
         "new_status": report.status,
     }
 
+
+
+
+@router.get("/ad-library/facebook", auth=auth, tags=["Ad Library"])
+def facebook_ad_library(request, domain: str, campaign_id: str = ""):
+    from reports.services.ad_library import search_facebook_ads
+    return search_facebook_ads(domain=domain, campaign_id=campaign_id)
+
+
+@router.get("/ad-library/google", auth=auth, tags=["Ad Library"])
+def google_ad_library(request, domain: str):
+    from reports.services.google_ads import search_google_ads
+    return search_google_ads(domain=domain)
+
+
+
+
+
+from django.http import HttpResponse
+import csv
+from ninja import Router
+from django.views.decorators.http import require_GET
+import csv
+@router.get("/reports/export", auth=auth, tags=["Reports"], response=None)
+def export_reports_csv(request):
+    user = request.user
+    reports = ScamReport.objects.filter(submitted_by=user).order_by("-created_at")
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="scam_reports.csv"'
+    response["Access-Control-Expose-Headers"] = "Content-Disposition"
+
+    writer = csv.writer(response)
+    writer.writerow([
+        "Brand", "Phone Number", "Carrier",
+        "Landing URL", "Status", "Created At", "Report Sent At",
+    ])
+
+    for r in reports:
+        writer.writerow([
+            r.brand,
+            r.phone_number,
+            r.resporg_raw or "",
+            r.landing_url or "",
+            r.status,
+            r.created_at.strftime("%Y-%m-%d %H:%M"),
+            r.report_sent_at.strftime("%Y-%m-%d %H:%M") if r.report_sent_at else "",
+        ])
+
+    return response

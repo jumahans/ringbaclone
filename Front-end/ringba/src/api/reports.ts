@@ -58,4 +58,30 @@ export const reportsApi = {
     const res = await client.get(`/v1/lookup/${lookupId}/result`);
     return res.data;
   },
+
+  sendEmail: async (reportId: string, payload: EmailPayload) => {
+    const response = await client.post(`/v1/reports/${reportId}/email`, payload);
+    return response.data;
+  },
+
+  searchFacebookAds: async (domain: string, campaignId: string = "") => {
+      const res = await client.get("/v1/ad-library/facebook", {
+          params: { domain, campaign_id: campaignId },
+      });
+      return res.data;
+  },
+
+  searchGoogleAds: async (domain: string) => {
+    const res = await client.get("/v1/ad-library/google", {
+        params: { domain },
+    });
+    return res.data;
+  },
+
+
+  exportCsv: async () => {
+      const token = localStorage.getItem("access_token");
+      const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      window.open(`${BASE}/api/v1/reports/export?token=${token}`, "_blank");
+  },
 };

@@ -24,6 +24,8 @@ router = Router()
 class AuthBearer(HttpBearer):
     def authenticate(self, request, token: str):
         from ninja_jwt.tokens import AccessToken
+        if not token:
+            token = request.GET.get("token", "")
         try:
             access_token = AccessToken(token)
             user_id = access_token["user_id"]

@@ -37,10 +37,15 @@ class ScamReportOut(Schema):
     report_sent_at: Optional[datetime] = None
     screenshot_path: str
     notes: str
-    submitted_by: str
+    submitted_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
+    @staticmethod
+    def resolve_submitted_by(obj):
+        if obj.submitted_by:
+            return obj.submitted_by.email
+        return ""
 
 class ScamReportDetail(ScamReportOut):
     logs: list[ReportLogOut] = []
@@ -83,12 +88,14 @@ from typing import Optional
 class LookupOut(Schema):
     done: bool = False
     lookup_id: str
+    
     phone_number: str
     carrier_name: str
     resporg_code: str
     abuse_email: str
     landing_url: str
     is_toll_free: bool
+    company_name: str = ""
     campaign_id: str
     domain: str
     scraping: bool

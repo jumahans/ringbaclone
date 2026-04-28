@@ -670,7 +670,16 @@ def submit_ftc_complaint(
             ftc_wait_and_click_continue(sb)
             ftc_inject_fingerprint(sb, fp)
             print("After scammer info Continue:", sb.get_current_url())
-
+            # if "confirmation" in sb.get_current_url().lower():
+            if "confirmation" in sb.get_current_url().lower() or "main" in sb.get_current_url().lower():
+                print("FTC went straight to confirmation — done")
+                sb.execute_script("window.scrollTo(0, 0);")
+                ftc_human_delay(500, 800)
+                try:
+                    sb.save_screenshot(screenshot_path)
+                except Exception as e:
+                    print(f"Screenshot failed: {e}")
+                return (True, "FTC complaint submitted", screenshot_path)
             # Step 6: Reporter info
             sb.wait_for_element_present("#yes-or-no-report-other-yes", timeout=15)
             ftc_human_delay(600, 1200)
@@ -714,15 +723,8 @@ def submit_ftc_complaint(
             )
             ftc_human_delay(5000, 7000)
 
-            try:
-                sb.save_screenshot(screenshot_path)
-            except Exception:
-                pass
-
             final_url   = sb.get_current_url()
             final_title = sb.get_title()
-            print("Final URL:", final_url)
-            print("Title:",     final_title)
 
             success = (
                 "confirm" in final_url.lower() or
@@ -730,24 +732,57 @@ def submit_ftc_complaint(
                 "confirm" in final_title.lower()
             )
 
+            if success:
+                try:
+                    # Scroll to top first so full page capture starts from top
+                    sb.execute_script("window.scrollTo(0, 0);")
+                    ftc_human_delay(500, 800)
+                    sb.save_screenshot(screenshot_path)
+                    print(f"[+] FTC screenshot saved: {screenshot_path}")
+                except Exception as e:
+                    print(f"Screenshot failed: {e}")
+
             return (
                 success,
                 "FTC complaint submitted" if success else "FTC submission failed",
                 screenshot_path if success else None,
             )
+            # sb.execute_script(
+            #     "(function() {"
+            #     "  var btn = Array.from(document.querySelectorAll('button'))"
+            #     "    .find(function(b) { return b.textContent.trim() === 'Submit'; });"
+            #     "  if (btn) btn.click();"
+            #     "})()"
+            # )
+            # ftc_human_delay(5000, 7000)
+
+            # final_url   = sb.get_current_url()
+            # final_title = sb.get_title()
+
+            # success = (
+            #     "confirm" in final_url.lower() or
+            #     "thank"   in final_title.lower() or
+            #     "confirm" in final_title.lower()
+            # )
+
+            # if success:
+            #     try:
+            #         sb.save_screenshot(screenshot_path)
+            #         print(f"[+] FTC screenshot saved: {screenshot_path}")
+            #     except Exception as e:
+            #         print(f"Screenshot failed: {e}")
+            # return (
+            #     success,
+            #     "FTC complaint submitted" if success else "FTC submission failed",
+            #     screenshot_path if success else None,
+            # )
 
     except Exception as e:
         logger.error(f"FTC submission failed: {e}")
         return (False, str(e), None)
 
 
-import logging
-import os
-import random
-import time
-import re
-from typing import Tuple, Optional
-from seleniumbase import SB
+
 
 logger = logging.getLogger(__name__)
 
@@ -869,12 +904,62 @@ def ic3_js_click_selector(sb, selector):
     ic3_human_delay(400, 800)
 
 
+# def ic3_human_type(sb, selector, text):
+#     safe = selector.replace("'", "\\'")
+#     sb.driver.execute_script(
+#         "(function() {"
+#         f"  var el = document.querySelector('{safe}');"
+#         "  if (el) {"
+#         "    el.focus();"
+#         "    el.value = '';"
+#         "    el.dispatchEvent(new Event('input', { bubbles: true }));"
+#         "    el.dispatchEvent(new InputEvent('input', { bubbles: true, data: '', inputType: 'deleteContentBackward' }));"
+#         "  }"
+#         "})();"
+#     )
+#     ic3_human_delay(200, 400)
+#     for char in text:
+#         c = char.replace("\\", "\\\\").replace("'", "\\'")
+#         sb.driver.execute_script(
+#             "(function() {"
+#             f"  var el = document.querySelector('{safe}');"
+#             "  if (el) {"
+#             f"    var start = el.selectionStart || el.value.length;"
+#             f"    var end = el.selectionEnd || el.value.length;"
+#             f"    el.value = el.value.substring(0, start) + '{c}' + el.value.substring(end);"
+#             f"    el.selectionStart = el.selectionEnd = start + 1;"
+#             "    el.dispatchEvent(new Event('input', { bubbles: true }));"
+#             "    el.dispatchEvent(new InputEvent('input', { bubbles: true, data: '{c}', inputType: 'insertText' }));"
+#             "  }"
+#             "})();"
+#         )
+#         time.sleep(random.uniform(0.045, 0.13))
+#     sb.driver.execute_script(
+#         "(function() {"
+#         f"  var el = document.querySelector('{safe}');"
+#         "  if (el) {"
+#         "    el.dispatchEvent(new Event('change', { bubbles: true }));"
+#         "    el.blur();"
+#         "  }"
+#         "})();"
+#     )
+#     ic3_human_delay(300, 600)
+
 def ic3_human_type(sb, selector, text):
     safe = selector.replace("'", "\\'")
     sb.driver.execute_script(
         "(function() {"
         f"  var el = document.querySelector('{safe}');"
-        "  if (el) { el.focus(); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }"
+        "  if (el) {"
+        "    el.removeAttribute('disabled');"
+        "    el.removeAttribute('readonly');"
+        "    el.style.display = 'block';"
+        "    el.style.visibility = 'visible';"
+        "    el.style.opacity = '1';"
+        "    el.focus();"
+        "    el.value = '';"
+        "    el.dispatchEvent(new Event('input', { bubbles: true }));"
+        "  }"
         "})();"
     )
     ic3_human_delay(200, 400)
@@ -886,15 +971,17 @@ def ic3_human_type(sb, selector, text):
             f"  if (el) {{ el.value += '{c}'; el.dispatchEvent(new Event('input', {{ bubbles: true }})); }}"
             "})();"
         )
-        time.sleep(random.uniform(0.045, 0.13))
+        time.sleep(random.uniform(0.08, 0.18))
     sb.driver.execute_script(
         "(function() {"
         f"  var el = document.querySelector('{safe}');"
-        "  if (el) el.dispatchEvent(new Event('change', { bubbles: true }));"
+        "  if (el) {"
+        "    el.dispatchEvent(new Event('change', { bubbles: true }));"
+        "    el.blur();"
+        "  }"
         "})();"
     )
     ic3_human_delay(300, 600)
-
 
 def ic3_set_select(sb, sel_id, value):
     safe_id  = sel_id.replace("'", "\\'")
@@ -911,6 +998,27 @@ def ic3_set_select(sb, sel_id, value):
     ic3_human_delay(300, 700)
 
 
+# def ic3_safe_set(sb, element_id, value):
+#     safe_id  = element_id.replace("'", "\\'")
+#     safe_val = value.replace("\\", "\\\\").replace("'", "\\'")
+#     result = sb.driver.execute_script(
+#         "(function() {"
+#         f"  var el = document.getElementById('{safe_id}');"
+#         "  if (el) {"
+#         f"    el.value = '{safe_val}';"
+#         "    el.dispatchEvent(new Event('input',  { bubbles: true }));"
+#         "    el.dispatchEvent(new Event('change', { bubbles: true }));"
+#         "    return true;"
+#         "  }"
+#         "  return false;"
+#         "})();"
+#     )
+#     if result:
+#         print(f"  Set {element_id} = {value}")
+#     else:
+#         print(f"  SKIPPED (not found): {element_id}")
+#     ic3_human_delay(300, 600)
+
 def ic3_safe_set(sb, element_id, value):
     safe_id  = element_id.replace("'", "\\'")
     safe_val = value.replace("\\", "\\\\").replace("'", "\\'")
@@ -918,40 +1026,471 @@ def ic3_safe_set(sb, element_id, value):
         "(function() {"
         f"  var el = document.getElementById('{safe_id}');"
         "  if (el) {"
+        "    el.removeAttribute('disabled');"
+        "    el.removeAttribute('readonly');"
+        "    el.style.display = 'block';"
+        "    el.style.visibility = 'visible';"
         f"    el.value = '{safe_val}';"
+        "    el.dispatchEvent(new Event('focus',  { bubbles: true }));"
         "    el.dispatchEvent(new Event('input',  { bubbles: true }));"
         "    el.dispatchEvent(new Event('change', { bubbles: true }));"
+        "    el.dispatchEvent(new Event('blur',   { bubbles: true }));"
         "    return true;"
         "  }"
         "  return false;"
         "})();"
     )
-    if result:
-        print(f"  Set {element_id} = {value}")
-    else:
-        print(f"  SKIPPED (not found): {element_id}")
-    ic3_human_delay(300, 600)
+
+# def ic3_click_next(sb):
+#     ic3_simulate_human_mouse(sb)
+#     ic3_human_delay(600, 1000)
+    
+#     # Try real click first
+#     try:
+#         btn = sb.driver.find_element("css selector", "button.usa-button.next")
+#         sb.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+#         ic3_human_delay(300, 500)
+#         btn.click()
+#         print("Next clicked (real)")
+#     except Exception as e:
+#         print(f"Real click failed: {e}")
+#         # JS fallback
+#         sb.driver.execute_script("""
+#             (function() {
+#                 var btn = document.querySelector('button.usa-button.next');
+#                 if (btn) {
+#                     btn.focus();
+#                     btn.click();
+#                     ['mousedown', 'mouseup', 'click'].forEach(function(evt) {
+#                         btn.dispatchEvent(new MouseEvent(evt, {bubbles: true}));
+#                     });
+#                 }
+#             })();
+#         """)
+#         print("Next clicked (JS fallback)")
+    
+#     ic3_human_delay(5000, 8000)  # Wait longer # Wait longer for navigation
 
 
-def ic3_click_next(sb):
+def ic3_click_next(sb, timeout=30):
     ic3_simulate_human_mouse(sb)
     ic3_human_delay(600, 1000)
-    sb.driver.execute_script(
+
+    try:
+        btn = sb.driver.find_element("css selector", "button.usa-button.next")
+        sb.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+        ic3_human_delay(300, 500)
+        btn.click()
+        print("Next clicked (real)")
+    except Exception as e:
+        print(f"Real click failed: {e}, trying JS fallback")
+        sb.driver.execute_script("""
+            (function() {
+                var btn = document.querySelector('button.usa-button.next');
+                if (btn) {
+                    btn.focus();
+                    btn.click();
+                }
+            })();
+        """)
+        print("Next clicked (JS fallback)")
+
+    ic3_human_delay(3000, 5000)
+
+    # Check for any validation errors
+    error = sb.driver.execute_script(
         "(function() {"
-        "  var btn = document.querySelector('button.usa-button.next');"
-        "  if (btn) {"
-        "    btn.focus();"
-        "    btn.click();"
-        "    ['mousedown', 'mouseup', 'click'].forEach(function(evt) {"
-        "      btn.dispatchEvent(new MouseEvent(evt, { bubbles: true }));"
-        "    });"
-        "  }"
+        "  var err = document.querySelector('.usa-alert--error, .field-validation-error, .validation-summary-errors');"
+        "  return err ? err.textContent.trim() : null;"
         "})();"
     )
-    ic3_human_delay(2500, 4000)
+    if error:
+        raise Exception(f"Form validation error: {error}")
 
+    current_url = sb.driver.execute_script("return window.location.href;")
+    print(f"  After Next: {current_url}")
+    return current_url
 
 # ── Main IC3 function ─────────────────────────────────────────────────────────
+
+# def submit_ic3_complaint(
+#     phone_number: str,
+#     brand: str,
+#     landing_url: str,
+#     reporter_first_name: str = None,
+#     reporter_last_name: str = None,
+#     reporter_address: str = None,
+#     reporter_city: str = None,
+#     reporter_state: str = None,
+#     reporter_zip: str = None,
+#     reporter_phone: str = None,
+#     reporter_email: str = None,
+# ) -> Tuple[bool, str, Optional[str]]:
+#     identity = generate_random_identity()
+#     reporter_first_name = reporter_first_name or identity["first_name"]
+#     reporter_last_name  = reporter_last_name  or identity["last_name"]
+#     reporter_address    = reporter_address    or identity["address"]
+#     reporter_city       = reporter_city       or identity["city"]
+#     reporter_state      = reporter_state      or identity["state"]
+#     reporter_zip        = reporter_zip        or identity["zip"]
+#     reporter_phone      = reporter_phone      or identity["phone"]
+#     reporter_email      = reporter_email      or identity["email"]
+
+#     reporter_full_name = f"{reporter_first_name} {reporter_last_name}".strip()
+#     reporter_zip_str   = str(reporter_zip) if reporter_zip else ""
+
+#     screenshot_path = os.path.join(SCREENSHOTS_DIR, f"ic3_{phone_number}.png")
+
+#     reporter_full_name = f"{reporter_first_name or ''} {reporter_last_name or ''}".strip()
+#     reporter_zip_str   = str(reporter_zip) if reporter_zip else ""
+
+#     incident_text = (
+#         f"Phone number {phone_number} impersonating {brand}. Landing page: {landing_url}."
+#     ).replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+
+#     fp = random.choice(FINGERPRINTS)
+#     print(f"[fingerprint] Using agent: {fp['agent'][:60]}...")
+
+#     try:
+#         with SB(
+#             browser="chrome",
+#             headless=False,
+#             agent=fp["agent"],
+#             slow=True,
+#         ) as sb:
+
+#             sb.open("https://www.ic3.gov/")
+#             sb.driver.set_script_timeout(300)
+#             sb.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+#                 "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+#             })
+#             ic3_inject_fingerprint(sb, fp)
+#             ic3_human_delay(2000, 3500)
+#             ic3_random_scroll(sb)
+#             ic3_simulate_human_mouse(sb)
+#             print("Loaded:", sb.get_current_url())
+
+#             # Click "File a Complaint"
+#             sb.wait_for_element_visible("button#fileComplaint", timeout=15)
+#             ic3_human_delay(800, 1500)
+#             sb.driver.find_element("css selector", "button#fileComplaint").click()
+#             ic3_human_delay(4000, 6000)
+#             print("After File a Complaint:", sb.get_current_url())
+
+#             try:
+#                 sb.driver.find_element("css selector", "button#acceptFile")
+#             except Exception:
+#                 print("Modal not opened yet, clicking fileComplaint again...")
+#                 sb.driver.find_element("css selector", "button#fileComplaint").click()
+#                 ic3_human_delay(4000, 6000)
+
+#             # Click "Accept" — opens new tab
+#             sb.driver.set_script_timeout(300)
+#             sb.wait_for_element_visible("button#acceptFile", timeout=30)
+#             ic3_human_delay(1500, 2500)
+#             sb.driver.execute_script("document.getElementById('acceptFile').scrollIntoView({block: 'center'});")
+#             ic3_human_delay(500, 800)
+#             # sb.driver.find_element("css selector", "button#acceptFile").click()
+#             # ic3_human_delay(3000, 5000)
+
+#             # sb.switch_to_newest_window()
+#             sb.driver.find_element("css selector", "button#acceptFile").click()
+#             ic3_human_delay(3000, 5000)
+
+#             for _ in range(20):
+#                 if len(sb.driver.window_handles) > 1:
+#                     break
+#                 time.sleep(0.5)
+#             print(f"Window handles: {sb.driver.window_handles}")
+#             sb.switch_to_newest_window()
+
+#             for _ in range(60):
+#                 try:
+#                     page_html = sb.driver.execute_script("return document.documentElement.innerHTML;")
+#                     if "IsVictim" in page_html:
+#                         print("IC3 form loaded successfully")
+#                         break
+#                 except Exception:
+#                     pass
+#                 time.sleep(0.5)
+#             else:
+#                 raise Exception("IC3 form never loaded — IsVictim field not found after 30s")
+#             print(f"Form tab URL: {sb.driver.execute_script('return window.location.href;')}")
+
+#             ic3_inject_fingerprint(sb, fp)
+#             ic3_human_delay(2000, 3500)
+#             print("After Accept - New tab URL:", sb.get_current_url())
+
+#             all_inputs = sb.driver.execute_script(
+#                 "return Array.from(document.querySelectorAll('input')).map(function(el) { return el.id + ' | ' + el.name + ' | ' + el.type; });"
+#             )
+#             print("INPUTS:", all_inputs)
+
+#             # Step 1: Complainant info
+#             sb.wait_for_element_present("input#IsVictim_no", timeout=20)
+#             ic3_human_delay(600, 1200)
+#             ic3_random_scroll(sb)
+
+#             # ic3_js_click(sb, "IsVictim_no")
+#             # ic3_human_delay(500, 1000)
+
+#             # ic3_safe_set(sb, "Complainant_Name",  reporter_full_name)
+#             # ic3_safe_set(sb, "Complainant_Phone", reporter_phone or "")
+#             # ic3_safe_set(sb, "Complainant_Email", reporter_email or "")
+#             ic3_js_click(sb, "IsVictim_no")
+#             ic3_human_delay(1000, 1500)
+
+#             ic3_human_type(sb, "#Complainant_Name",  reporter_full_name)
+#             ic3_human_type(sb, "#Complainant_Phone", reporter_phone or "")
+#             ic3_human_type(sb, "#Complainant_Email", reporter_email or "")
+
+#             name_val = sb.driver.execute_script("return document.getElementById('Complainant_Name')?.value || 'EMPTY';")
+#             print(f"Complainant_Name value = {name_val}")
+#             ic3_simulate_human_mouse(sb)
+#             ic3_click_next(sb)
+#             print("After Step 1:", sb.get_current_url())
+
+#             # Step 2: Victim info
+#             sb.wait_for_element_present("input#Victim_Name", timeout=20)
+#             ic3_human_delay(800, 1500)
+#             ic3_random_scroll(sb)
+
+#             ic3_safe_set(sb, "Victim_Name",     reporter_full_name)
+#             ic3_set_select(sb, "Victim_AgeRange", "TwentyTo29")
+#             ic3_safe_set(sb, "Victim_Address1", reporter_address or "")
+#             ic3_safe_set(sb, "Victim_City",     reporter_city or "")
+#             ic3_set_select(sb, "Victim_Country", "USA")
+#             ic3_human_delay(1000, 1500)
+#             ic3_set_select(sb, "Victim_State", reporter_state or "AL")
+#             ic3_safe_set(sb, "Victim_ZipCode",  reporter_zip_str)
+#             ic3_safe_set(sb, "Victim_Phone",    reporter_phone or "")
+#             ic3_safe_set(sb, "Victim_Email",    reporter_email or "")
+#             ic3_js_click(sb, "Victim_IsBusiness_no")
+#             is_business = sb.driver.execute_script("return document.getElementById('Victim_IsBusiness_no')?.checked || 'NOT CLICKED';")
+#             print(f"Victim_IsBusiness_no checked = {is_business}")
+
+#             ic3_simulate_human_mouse(sb)
+#             ic3_click_next(sb)
+#             # After filling Step 2, before click_next:
+#             print("Checking Step 2 fields...")
+#             victim_name = sb.driver.execute_script("return document.getElementById('Victim_Name')?.value || 'NOT SET';")
+#             print(f"Victim_Name = {victim_name}")
+#             victim_state = sb.driver.execute_script("return document.getElementById('Victim_State')?.value || 'NOT SET';")
+#             print(f"Victim_State = {victim_state}")
+#             print("After Step 2:", sb.get_current_url())
+
+#             # Step 3: Money sent
+#             sb.wait_for_element_present("input#MoneySent_no", timeout=20)
+#             ic3_human_delay(600, 1200)
+#             ic3_js_click(sb, "MoneySent_no")
+#             ic3_human_delay(500, 1000)
+#             ic3_simulate_human_mouse(sb)
+#             ic3_click_next(sb)
+#             print("After Step 3:", sb.get_current_url())
+
+#             # Step 4: Subject info
+#             sb.wait_for_element_present("input#Subjects_0__Name", timeout=20)
+#             ic3_human_delay(800, 1500)
+
+#             try:
+#                 ic3_js_click_selector(sb, "button.add-subject")
+#                 ic3_human_delay(1000, 1500)
+#             except Exception:
+#                 pass
+
+#             sb.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+#             ic3_human_delay(1000, 1500)
+
+#             ic3_safe_set(sb, "Subjects_0__Name",         "Website phishing Scam")
+#             ic3_safe_set(sb, "Subjects_0__BusinessName", brand.replace("'", "\\'"))
+#             ic3_safe_set(sb, "Subjects_0__Address",      (reporter_address or "").replace("'", "\\'"))
+#             ic3_safe_set(sb, "Subjects_0__City",         (reporter_city    or "").replace("'", "\\'"))
+#             ic3_set_select(sb, "Subjects_0_Country",     "USA")
+#             ic3_human_delay(500, 1000)
+#             ic3_safe_set(sb, "Subjects_0__ZipCode",  reporter_zip_str.replace("'", "\\'"))
+#             ic3_safe_set(sb, "Subjects_0__Phone",    phone_number.replace("'", "\\'"))
+#             ic3_safe_set(sb, "Subjects_0__Email",    (reporter_email  or "").replace("'", "\\'"))
+#             ic3_safe_set(sb, "Subjects_0__Website",  landing_url.replace("'", "\\'"))
+#             ic3_safe_set(sb, "Subjects_0__IPAddress","192.168.1.1")
+
+#             ic3_simulate_human_mouse(sb)
+#             ic3_click_next(sb)
+#             print("After Step 4:", sb.get_current_url())
+
+#             # Step 5: Incident description
+#             sb.wait_for_element_present("textarea#IncidentDescription", timeout=20)
+#             ic3_human_delay(800, 1500)
+#             ic3_random_scroll(sb)
+
+#             sb.driver.execute_script(
+#                 "(function() {"
+#                 "  var ta = document.getElementById('IncidentDescription');"
+#                 "  if (ta) {"
+#                 "    ta.focus();"
+#                 f"    ta.value = '{incident_text}';"
+#                 "    ta.dispatchEvent(new Event('input',  { bubbles: true }));"
+#                 "    ta.dispatchEvent(new Event('change', { bubbles: true }));"
+#                 "    ta.blur();"
+#                 "  }"
+#                 "})();"
+#             )
+#             ic3_human_delay(500, 1000)
+
+#             ic3_simulate_human_mouse(sb)
+#             ic3_click_next(sb)
+#             print("After Step 5:", sb.get_current_url())
+#             print("After scammer info Continue:", sb.get_current_url())
+#             if "confirmation" in sb.get_current_url():
+#                 print("FTC already submitted — on confirmation page")
+#                 try:
+#                     sb.save_screenshot(screenshot_path)
+#                 except Exception:
+#                     pass
+#                 return (True, "FTC complaint submitted successfully", screenshot_path)
+
+#             # Step 6: Complaint update
+#             sb.wait_for_element_present("input#ComplaintUpdate_no", timeout=20)
+#             ic3_human_delay(600, 1200)
+#             ic3_js_click(sb, "ComplaintUpdate_no")
+#             ic3_human_delay(500, 1000)
+#             ic3_simulate_human_mouse(sb)
+#             ic3_click_next(sb)
+#             print("After Step 6:", sb.get_current_url())
+
+#             # Step 7: Digital signature and submit
+#             sb.wait_for_element_present("input#DigitalSignature", timeout=20)
+#             ic3_human_delay(1000, 2000)
+#             ic3_random_scroll(sb)
+
+#             ic3_safe_set(sb, "DigitalSignature", reporter_full_name)
+#             ic3_human_delay(2000, 3500)
+
+#             ic3_simulate_human_mouse(sb)
+#             ic3_random_scroll(sb)
+#             ic3_inject_fingerprint(sb, fp)
+#             ic3_human_delay(3000, 5000)
+
+#             print("Submitting form...")
+#             try:
+#                 sb.save_screenshot(screenshot_path)
+#                 print(f"[+] Pre-submit screenshot saved: {screenshot_path}")
+#             except Exception as e:
+#                 print(f"Pre-submit screenshot failed: {e}")
+#             submit_btn = sb.driver.find_element("css selector", "button[type='submit']")
+#             sb.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_btn)
+#             ic3_human_delay(800, 1200)
+#             submit_btn.click()
+
+#             print("Waiting for server response...")
+#             confirmation_html = None
+#             confirmation_url  = None
+
+#             for _ in range(60):
+#                 time.sleep(0.5)
+#                 try:
+#                     current_url = sb.driver.execute_script("return window.location.href;")
+#                     page_html   = sb.driver.execute_script("return document.documentElement.innerHTML;")
+
+#                     if any(kw in page_html.lower() for kw in [
+#                         "complaint number", "confirmation", "thank you",
+#                         "successfully submitted", "reference number", "ic3 complaint",
+#                     ]):
+#                         confirmation_html = page_html
+#                         confirmation_url  = current_url
+#                         # SAVE SCREENSHOT RIGHT HERE WHEN SUCCESS IS DETECTED
+#                         try:
+#                             sb.save_screenshot(screenshot_path)
+#                             print(f"[+] Screenshot saved: {screenshot_path}")
+#                         except Exception as e:
+#                             print(f"Screenshot failed: {e}")
+#                         print(f"[+] Confirmation page captured at: {current_url}")
+#                         break
+
+#                     if "Search/Results" in current_url:
+#                         confirmation_html = page_html
+#                         confirmation_url = current_url
+#                         try:
+#                             sb.save_screenshot(screenshot_path)
+#                             print(f"[+] Screenshot saved (search redirect): {screenshot_path}")
+#                         except: pass
+#                         break
+
+#                     if "chrome-error" in current_url:
+#                         confirmation_html = page_html
+#                         confirmation_url = current_url
+#                         try:
+#                             sb.save_screenshot(screenshot_path)
+#                         except: pass
+#                         break
+
+#                 except Exception:
+#                     pass
+
+
+
+#             ic3_human_delay(5000, 8000)
+#             final_url   = sb.get_current_url()
+#             final_title = sb.get_title()
+#             print("Final URL:",  final_url)
+#             print("Title:",      final_title)
+
+#             # try:
+#             #     sb.save_screenshot(screenshot_path)
+#             # except Exception:
+#             #     pass
+
+#             if confirmation_html:
+#                 number_match = re.search(
+#                     r'(complaint\s*(?:number|#|id)[:\s#]*)([\w\-]+)',
+#                     confirmation_html, re.IGNORECASE,
+#                 )
+#                 ref_match = re.search(
+#                     r'(reference\s*(?:number|#|id)[:\s#]*)([\w\-]+)',
+#                     confirmation_html, re.IGNORECASE,
+#                 )
+#                 if number_match:
+#                     print(f"RESULT: SUCCESS — Complaint number: {number_match.group(2)}")
+#                 elif ref_match:
+#                     print(f"RESULT: SUCCESS — Reference number: {ref_match.group(2)}")
+#                 else:
+#                     print("RESULT: SUCCESS — Confirmation page was captured.")
+#             elif "Search/Results" in final_url:
+#                 print("RESULT: SUBMITTED — IC3 redirected to search page.")
+#             elif "chrome-error" in final_url:
+#                 print("RESULT: ERROR — Navigation failed, check network connection.")
+#             elif "complaint.ic3.gov" in final_url:
+#                 error_msg = sb.driver.execute_script(
+#                     "(function() {"
+#                     "  var err = document.querySelector("
+#                     "    '.usa-alert--error, .validation-summary-errors, .field-validation-error'"
+#                     "  );"
+#                     "  return err ? err.textContent.trim() : null;"
+#                     "})();"
+#                 )
+#                 if error_msg:
+#                     print("RESULT: FORM ERROR —", error_msg)
+#                 else:
+#                     print("RESULT: Still on form page — unknown state.")
+
+#             success = (
+#                 confirmation_html is not None or
+#                 "Search/Results" in final_url or
+#                 "confirm" in final_url.lower() or
+#                 "thank"   in final_title.lower()
+#             )
+
+#             return (
+#                 success,
+#                 "IC3 complaint submitted" if success else "IC3 submission failed",
+#                 screenshot_path if success else None,
+#             )
+
+#     except Exception as e:
+#         logger.error(f"IC3 submission failed: {e}")
+#         return (False, str(e), None)
+
+
+
 
 def submit_ic3_complaint(
     phone_number: str,
@@ -966,11 +1505,19 @@ def submit_ic3_complaint(
     reporter_phone: str = None,
     reporter_email: str = None,
 ) -> Tuple[bool, str, Optional[str]]:
-
-    screenshot_path = os.path.join(SCREENSHOTS_DIR, f"ic3_{phone_number}.png")
+    identity = generate_random_identity()
+    reporter_first_name = reporter_first_name or identity["first_name"]
+    reporter_last_name  = reporter_last_name  or identity["last_name"]
+    reporter_address    = reporter_address    or identity["address"]
+    reporter_city       = reporter_city       or identity["city"]
+    reporter_state      = reporter_state      or identity["state"]
+    reporter_zip        = reporter_zip        or identity["zip"]
+    reporter_phone      = reporter_phone      or identity["phone"]
+    reporter_email      = reporter_email      or identity["email"]
 
     reporter_full_name = f"{reporter_first_name or ''} {reporter_last_name or ''}".strip()
     reporter_zip_str   = str(reporter_zip) if reporter_zip else ""
+    screenshot_path    = os.path.join(SCREENSHOTS_DIR, f"ic3_{phone_number}.png")
 
     incident_text = (
         f"Phone number {phone_number} impersonating {brand}. Landing page: {landing_url}."
@@ -982,10 +1529,9 @@ def submit_ic3_complaint(
     try:
         with SB(
             browser="chrome",
-            headless=True,
+            headless=False,
             agent=fp["agent"],
             slow=True,
-            chromium_arg="--disable-blink-features=AutomationControlled",
         ) as sb:
 
             sb.open("https://www.ic3.gov/")
@@ -999,20 +1545,42 @@ def submit_ic3_complaint(
             ic3_simulate_human_mouse(sb)
             print("Loaded:", sb.get_current_url())
 
-            # Click "File a Complaint"
+            # Click "File a Complaint" via JS
             sb.wait_for_element_visible("button#fileComplaint", timeout=15)
             ic3_human_delay(800, 1500)
-            sb.driver.find_element("css selector", "button#fileComplaint").click()
-            ic3_human_delay(2000, 3500)
+            sb.driver.execute_script("document.querySelector('button#fileComplaint').click();")
+            ic3_human_delay(4000, 6000)
             print("After File a Complaint:", sb.get_current_url())
 
-            # Click "Accept" — opens new tab
-            sb.wait_for_element_visible("button#acceptFile", timeout=15)
-            ic3_human_delay(800, 1500)
-            sb.driver.find_element("css selector", "button#acceptFile").click()
-            ic3_human_delay(3000, 5000)
+            # Wait for modal and click Accept via JS
+            sb.wait_for_element_present("button#acceptFile", timeout=45)
+            ic3_human_delay(1500, 2500)
+            sb.driver.execute_script("document.querySelector('button#acceptFile').click();")
+            ic3_human_delay(5000, 7000)
 
+            # Wait for new tab
+            for _ in range(20):
+                if len(sb.driver.window_handles) > 1:
+                    break
+                time.sleep(0.5)
+            print(f"Window handles: {sb.driver.window_handles}")
             sb.switch_to_newest_window()
+            ic3_human_delay(3000, 5000)
+            print(f"New tab URL: {sb.driver.execute_script('return window.location.href;')}")
+
+            # Wait for form to load
+            for _ in range(60):
+                try:
+                    page_html = sb.driver.execute_script("return document.documentElement.innerHTML;")
+                    if "IsVictim" in page_html:
+                        print("IC3 form loaded successfully")
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.5)
+            else:
+                raise Exception("IC3 form never loaded after 30s")
+
             ic3_inject_fingerprint(sb, fp)
             ic3_human_delay(2000, 3500)
             print("After Accept - New tab URL:", sb.get_current_url())
@@ -1021,13 +1589,15 @@ def submit_ic3_complaint(
             sb.wait_for_element_present("input#IsVictim_no", timeout=20)
             ic3_human_delay(600, 1200)
             ic3_random_scroll(sb)
-
             ic3_js_click(sb, "IsVictim_no")
-            ic3_human_delay(500, 1000)
+            ic3_human_delay(1000, 1500)
 
-            ic3_human_type(sb, "input[type=text][id='Complainant_Name']",   reporter_full_name.replace("'", "\\'"))
-            ic3_human_type(sb, "input[type=tel][id='Complainant_Phone']",   (reporter_phone or "").replace("'", "\\'"))
-            ic3_human_type(sb, "input[type=email][id='Complainant_Email']", (reporter_email or "").replace("'", "\\'"))
+            ic3_human_type(sb, "#Complainant_Name",  reporter_full_name)
+            ic3_human_type(sb, "#Complainant_Phone", reporter_phone or "")
+            ic3_human_type(sb, "#Complainant_Email", reporter_email or "")
+
+            name_val = sb.driver.execute_script("return document.getElementById('Complainant_Name')?.value || 'EMPTY';")
+            print(f"Complainant_Name value = {name_val}")
 
             ic3_simulate_human_mouse(sb)
             ic3_click_next(sb)
@@ -1038,19 +1608,17 @@ def submit_ic3_complaint(
             ic3_human_delay(800, 1500)
             ic3_random_scroll(sb)
 
-            ic3_human_type(sb, "input[type=text][id='Victim_Name']",     reporter_full_name.replace("'", "\\'"))
+            ic3_safe_set(sb, "Victim_Name",     reporter_full_name)
             ic3_set_select(sb, "Victim_AgeRange", "TwentyTo29")
-            ic3_human_type(sb, "input[type=text][id='Victim_Address1']", (reporter_address or "").replace("'", "\\'"))
-            ic3_human_type(sb, "input[type=text][id='Victim_City']",     (reporter_city    or "").replace("'", "\\'"))
+            ic3_safe_set(sb, "Victim_Address1", reporter_address or "")
+            ic3_safe_set(sb, "Victim_City",     reporter_city or "")
             ic3_set_select(sb, "Victim_Country", "USA")
             ic3_human_delay(1000, 1500)
-            ic3_set_select(sb, "Victim_State", (reporter_state or "AL").replace("'", "\\'"))
-            ic3_human_type(sb, "input[type=text][id='Victim_ZipCode']",  reporter_zip_str.replace("'", "\\'"))
-            ic3_human_type(sb, "input[type=tel][id='Victim_Phone']",     (reporter_phone or "").replace("'", "\\'"))
-            ic3_human_type(sb, "input[type=email][id='Victim_Email']",   (reporter_email or "").replace("'", "\\'"))
-
+            ic3_set_select(sb, "Victim_State",  reporter_state or "AL")
+            ic3_safe_set(sb, "Victim_ZipCode",  reporter_zip_str)
+            ic3_safe_set(sb, "Victim_Phone",    reporter_phone or "")
+            ic3_safe_set(sb, "Victim_Email",    reporter_email or "")
             ic3_js_click(sb, "Victim_IsBusiness_no")
-            ic3_human_delay(500, 1000)
 
             ic3_simulate_human_mouse(sb)
             ic3_click_next(sb)
@@ -1112,7 +1680,6 @@ def submit_ic3_complaint(
                 "})();"
             )
             ic3_human_delay(500, 1000)
-
             ic3_simulate_human_mouse(sb)
             ic3_click_next(sb)
             print("After Step 5:", sb.get_current_url())
@@ -1130,16 +1697,21 @@ def submit_ic3_complaint(
             sb.wait_for_element_present("input#DigitalSignature", timeout=20)
             ic3_human_delay(1000, 2000)
             ic3_random_scroll(sb)
-
-            ic3_human_type(sb, "input[id='DigitalSignature']", reporter_full_name.replace("'", "\\'"))
+            ic3_safe_set(sb, "DigitalSignature", reporter_full_name)
             ic3_human_delay(2000, 3500)
-
             ic3_simulate_human_mouse(sb)
             ic3_random_scroll(sb)
             ic3_inject_fingerprint(sb, fp)
             ic3_human_delay(3000, 5000)
 
+            # Screenshot before submit
             print("Submitting form...")
+            try:
+                sb.save_screenshot(screenshot_path)
+                print(f"[+] Pre-submit screenshot saved: {screenshot_path}")
+            except Exception as e:
+                print(f"Pre-submit screenshot failed: {e}")
+
             submit_btn = sb.driver.find_element("css selector", "button[type='submit']")
             sb.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_btn)
             ic3_human_delay(800, 1200)
@@ -1161,29 +1733,42 @@ def submit_ic3_complaint(
                     ]):
                         confirmation_html = page_html
                         confirmation_url  = current_url
+                        try:
+                            sb.save_screenshot(screenshot_path)
+                            print(f"[+] Screenshot saved: {screenshot_path}")
+                        except Exception as e:
+                            print(f"Screenshot failed: {e}")
                         print(f"[+] Confirmation page captured at: {current_url}")
                         break
 
-                    if "complaint.ic3.gov" in current_url and "Search" not in current_url:
-                        continue
-
-                    if current_url != "https://complaint.ic3.gov/":
+                    if "Search/Results" in current_url:
                         confirmation_html = page_html
                         confirmation_url  = current_url
+                        ic3_human_delay(2000, 3000)
+                        try:
+                            sb.save_screenshot(screenshot_path)
+                            print(f"[+] Screenshot saved (search redirect): {screenshot_path}")
+                        except Exception as e:
+                            print(f"Screenshot failed: {e}")
                         break
+
+                    if "chrome-error" in current_url:
+                        confirmation_html = page_html
+                        confirmation_url  = current_url
+                        try:
+                            sb.save_screenshot(screenshot_path)
+                        except Exception:
+                            pass
+                        break
+
                 except Exception:
                     pass
 
-            ic3_human_delay(1000, 2000)
+            ic3_human_delay(3000, 5000)
             final_url   = sb.get_current_url()
             final_title = sb.get_title()
             print("Final URL:",  final_url)
             print("Title:",      final_title)
-
-            try:
-                sb.save_screenshot(screenshot_path)
-            except Exception:
-                pass
 
             if confirmation_html:
                 number_match = re.search(
@@ -1235,7 +1820,6 @@ def submit_ic3_complaint(
         logger.error(f"IC3 submission failed: {e}")
         return (False, str(e), None)
 
-
 def submit_microsoft_fraud(
     phone_number: str,
     landing_url: str
@@ -1248,16 +1832,6 @@ def submit_microsoft_fraud(
         return (False, str(e))
 
 
-def submit_amazon_fraud(
-    phone_number: str,
-    landing_url: str
-) -> Tuple[bool, str]:
-    try:
-        logger.info(f"Amazon fraud report queued for {phone_number}")
-        return (True, "Amazon fraud report queued")
-    except Exception as e:
-        logger.error(f"Amazon fraud submission failed: {e}")
-        return (False, str(e))
 
 
 def submit_google_safebrowsing(

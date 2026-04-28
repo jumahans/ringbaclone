@@ -1,4 +1,5 @@
 import logging
+import base64
 from datetime import datetime
 from django.core.mail import EmailMessage, get_connection
 from django.conf import settings
@@ -35,7 +36,7 @@ We request:
 3. Confirmation of action to: {reply_to}
 
 Sincerely,
-Scam Slayer Portal
+FraudHunter Portal
 Automated Abuse Reporting System
 """.strip()
 
@@ -58,13 +59,11 @@ CARRIER_ABUSE_EMAILS = {
     "cxsupport": "abuse@cxsupport.com",
 }
 
-# Always CC on every auto-generated complaint
 ALWAYS_CC = [
     "spam@uce.gov",
     "ic3@ic3.gov",
 ]
 
-# Brand-based CC
 BRAND_CC_EMAILS = {
     "amazon": "stop-spoofing@amazon.com",
     "aws": "stop-spoofing@amazon.com",
@@ -82,7 +81,6 @@ BRAND_CC_EMAILS = {
     "wells fargo": "reportphish@wellsfargo.com",
 }
 
-# URL domain-based CC
 URL_DOMAIN_CC_EMAILS = {
     "amazon.com": "stop-spoofing@amazon.com",
     "microsoft.com": "reportphishing@microsoft.com",
@@ -97,10 +95,6 @@ URL_DOMAIN_CC_EMAILS = {
 
 
 def get_cc_emails(brand: str, landing_url: str) -> list:
-    """
-    Build the default CC list for auto-generated complaints.
-    Not used for user-composed emails (those pass cc_override).
-    """
     cc = list(ALWAYS_CC)
 
     brand_lower = (brand or "").lower()
@@ -127,28 +121,16 @@ def send_resporg_complaint(
     landing_url: str,
     resporg_code: str,
     carrier_name: str,
-    # ── fields the user can now override ──────────────────────────────
     abuse_email: str = "",
-    to_override: str = "",        # user-specified To address
-    cc_override: list | None = None,   # user-specified CC list; None = use defaults
-    subject_override: str = "",   # user-specified subject
-    body_override: str = "",      # user-specified body (full plain-text)
-    # ──────────────────────────────────────────────────────────────────
+    to_override: str = "",
+    cc_override: list | None = None,
+    subject_override: str = "",
+    body_override: str = "",
+    bcc_override: list | None = None,
+    attachments: list | None = None,
 ) -> tuple[bool, str]:
-    """
-    Send a carrier abuse complaint.
 
-    When called from the automated pipeline, abuse_email is resolved from the
-    carrier map and cc/subject/body are generated from the template.
-
-    When called from the user-compose flow, pass:
-      - to_override     → replaces abuse_email as the To address
-      - cc_override     → exact list of CC addresses (skips default CC logic)
-      - subject_override → replaces the auto-generated subject
-      - body_override   → replaces the template body entirely
-    """
-
-    # ── Resolve To address ─────────────────────────────────────────────
+    # Resolve To address
     recipient = to_override.strip() if to_override else abuse_email.strip()
 
     if not recipient:
@@ -165,26 +147,24 @@ def send_resporg_complaint(
     if not settings.EMAIL_HOST_USER:
         return False, "Email not configured in settings."
 
-    reply_to = settings.SCAM_SLAYER_REPLY_EMAIL or settings.EMAIL_HOST_USER
+    reply_to = getattr(settings, 'SCAM_SLAYER_REPLY_EMAIL', None) or settings.DEFAULT_FROM_EMAIL
 
-    # ── Resolve CC ────────────────────────────────────────────────────
+    # Resolve CC
     if cc_override is not None:
-        # User explicitly provided their own CC list (may be empty)
         cc_emails = [e.strip() for e in cc_override if e.strip()]
     else:
-        # Automated flow: use brand/URL-based defaults
         cc_emails = get_cc_emails(brand, landing_url)
 
     logger.info(f"CC emails for report {report_id}: {cc_emails}")
 
-    # ── Resolve Subject ───────────────────────────────────────────────
+    # Resolve Subject
     subject = (
         subject_override.strip()
         if subject_override
         else f"[URGENT] Toll-Free Number Abuse — {phone_number}"
     )
 
-    # ── Resolve Body ──────────────────────────────────────────────────
+    # Resolve Body
     body = (
         body_override.strip()
         if body_override
@@ -201,7 +181,7 @@ def send_resporg_complaint(
         )
     )
 
-    # ── Send ──────────────────────────────────────────────────────────
+    # Send
     try:
         connection = get_connection(
             backend="django.core.mail.backends.smtp.EmailBackend",
@@ -209,17 +189,29 @@ def send_resporg_complaint(
             port=settings.EMAIL_PORT,
             username=settings.EMAIL_HOST_USER,
             password=settings.EMAIL_HOST_PASSWORD,
-            use_tls=settings.EMAIL_USE_TLS,
+            use_ssl=True,
+            use_tls=False,
         )
+        bcc_emails = [e.strip() for e in (bcc_override or []) if e.strip()]
+
         email = EmailMessage(
             subject=subject,
             body=body,
-            from_email=settings.EMAIL_HOST_USER,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient],
             cc=cc_emails,
+            bcc=bcc_emails,
             reply_to=[reply_to],
         )
         email.connection = connection
+
+        for att in (attachments or []):
+            try:
+                raw = base64.b64decode(att["data"])
+                email.attach(att["name"], raw, att["type"])
+            except Exception as att_err:
+                logger.warning(f"Could not attach {att.get('name')}: {att_err}")
+
         email.send(fail_silently=False)
         logger.info(
             f"Complaint sent for {phone_number} to {recipient} CC: {cc_emails}"

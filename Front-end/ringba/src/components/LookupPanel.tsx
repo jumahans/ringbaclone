@@ -7,6 +7,18 @@ import { reportsApi } from "../api/reports";
 
 interface LookupResult {
   lookup_id: string;
+  company_name: string;
+  traffic_source: string;
+  ad_platform: string;
+  click_id: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_content: string;
+  utm_term: string;
+  publisher_id: string;
+  sub_id: string;
+  referrer: string;
   phone_number: string;
   carrier_name: string;
   resporg_code: string;
@@ -155,6 +167,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
               ...prev,
               phone_number: res.phone_number,
               carrier_name: res.carrier_name,
+              company_name: res.company_name,
               resporg_code: res.resporg_code,
               abuse_email: res.abuse_email,
               is_toll_free: res.is_toll_free,
@@ -176,6 +189,17 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
               mcc: res.mcc,
               mnc: res.mnc,
               page_status: res.page_status,
+              traffic_source: res.traffic_source,
+              ad_platform:    res.ad_platform,
+              click_id:       res.click_id,
+              utm_source:     res.utm_source,
+              utm_medium:     res.utm_medium,
+              utm_campaign:   res.utm_campaign,
+              utm_content:    res.utm_content,
+              utm_term:       res.utm_term,
+              publisher_id:   res.publisher_id,
+              sub_id:         res.sub_id,
+              referrer:       res.referrer,
               scraping: false,
             } : prev
           );
@@ -272,6 +296,21 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
 
       {/* Results */}
       {result && (
+        <>
+          {scraping && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="bg-[#0f1117] border border-[#1e2130] rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl max-w-sm w-full mx-4">
+                <Loader size={40} className="animate-spin text-amber-400" />
+                <div className="text-center">
+                  <p className="text-white font-semibold text-base mb-1">Analyzing URL</p>
+                  <p className="text-[#6b7280] text-sm">Extracting phone number and traffic intelligence</p>
+                  <p className="text-amber-400 text-xs font-mono mt-3">Please wait — this may take up to 30 seconds</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+
         <div className="border border-[#1e2130] rounded-xl overflow-hidden">
 
           {/* Status Bar */}
@@ -312,6 +351,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
                 />
                 <Field label="International" value={result.international_format} mono />
                 <Field label="National" value={result.national_format} mono />
+                <Field label="Company Name" value={result.company_name} loading={scraping && !result.company_name} />
               </div>
             </div>
 
@@ -399,15 +439,26 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
             </div>
 
             {/* Campaign / URL — only show if URL lookup */}
-            {(result.campaign_id || result.domain) && (
+            {(result.traffic_source || result.campaign_id || result.domain || result.utm_source) && (
               <>
                 <div className="border-t border-[#1e2130]" />
                 <div>
-                  <SectionHeader icon={Cpu} title="Campaign / URL" />
+                  <SectionHeader icon={Cpu} title="Traffic Intelligence" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                    <Field label="Domain" value={result.domain} mono />
-                    <Field label="Campaign ID" value={result.campaign_id} mono color="amber" />
-                    <Field label="Abuse Email" value={result.abuse_email} mono />
+                    <Field label="Traffic Source" value={result.traffic_source || "—"} color={result.traffic_source ? "red" : "gray"} />
+                    <Field label="Ad Platform"    value={result.ad_platform    || "—"} color={result.ad_platform ? "amber" : "gray"} />
+                    <Field label="Campaign ID"    value={result.campaign_id    || "—"} mono color={result.campaign_id ? "amber" : "gray"} />
+                    <Field label="UTM Source"     value={result.utm_source     || "—"} mono />
+                    <Field label="UTM Medium"     value={result.utm_medium     || "—"} mono />
+                    <Field label="UTM Campaign"   value={result.utm_campaign   || "—"} mono />
+                    <Field label="UTM Content"    value={result.utm_content    || "—"} mono />
+                    <Field label="UTM Term"       value={result.utm_term       || "—"} mono />
+                    <Field label="Click ID"       value={result.click_id       || "—"} mono />
+                    <Field label="Publisher ID"   value={result.publisher_id   || "—"} mono />
+                    <Field label="Sub ID"         value={result.sub_id         || "—"} mono />
+                    <Field label="Referrer"       value={result.referrer       || "—"} mono />
+                    <Field label="Domain"         value={result.domain         || "—"} mono />
+                    <Field label="Abuse Email"    value={result.abuse_email    || "—"} mono />
                   </div>
                 </div>
               </>
@@ -424,7 +475,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
             />
             <button
               onClick={handleSubmit}
-              disabled={!brand.trim() || scraping || !result.is_toll_free}
+              disabled={!brand.trim() || scraping}
               className="w-full sm:w-auto px-4 sm:px-5 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
             >
               <Plus size={14} />
@@ -433,6 +484,7 @@ const LookupPanel: React.FC<LookupPanelProps> = ({ onSubmit }) => {
             </button>
           </div>
         </div>
+      </>
       )}
     </div>
   );
