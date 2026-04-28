@@ -19,14 +19,13 @@ import {
 import { reportsApi } from "../api/reports";
 import type { ScamReport, Stats } from "../types";
 import { useAuth } from "../context/AuthContext";
-import StatCard from "../components/ui/StatCard";
 import ReportsTable from "../components/ReportsTable";
 import SubmitModal from "../components/SubmitModal";
 import LookupPanel from "../components/LookupPanel";
 import type { EmailPayload } from "../components/ReportsTable";
 import AdLibraryPanel from "../components/AddLibraryPanel";
 import GoogleAdsPanel from "../components/GoogleAdsPanel";
-import DniPanel from "../components/DniPannel";
+
 
 const Dashboard: React.FC = () => {
   const [reports, setReports] = useState<ScamReport[]>([]);

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Search, ExternalLink, Globe } from "lucide-react";
+import {ExternalLink, Globe } from "lucide-react";
 
 const AdLibraryPanel: React.FC = () => {
   const [domain, setDomain] = useState("");

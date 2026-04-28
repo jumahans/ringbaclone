@@ -59,7 +59,7 @@ export const reportsApi = {
     return res.data;
   },
 
-  sendEmail: async (reportId: string, payload: EmailPayload) => {
+  sendEmail: async (reportId: string, payload: { to: string; cc: string[]; bcc: string[]; subject: string; body: string; attachments: { name: string; type: string; data: string }[] }) => {
     const response = await client.post(`/v1/reports/${reportId}/email`, payload);
     return response.data;
   },

@@ -461,7 +461,7 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     setLogsLoading(reportId);
     try {
       const report = await reportsApi.getReport(reportId);
-      const fetchedLogs = report.logs || [];
+      const fetchedLogs =(report as any).logs || [];
       setLogs((prev) => ({ ...prev, [reportId]: fetchedLogs }));
 
       // Check logs to set done states from history
@@ -484,7 +484,7 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     setLogsLoading(reportId);
     try {
       const report = await reportsApi.getReport(reportId);
-      const fetchedLogs = report.logs || [];
+      const fetchedLogs = (report as any).logs || [];
       setLogs((prev) => ({ ...prev, [reportId]: fetchedLogs }));
 
       const hasAuthorities = fetchedLogs.some((l: ReportLog) =>
