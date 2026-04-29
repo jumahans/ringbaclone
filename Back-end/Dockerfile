@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV SB_SKIP_BROWSER_INSTALL=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV SELENIUMBASE_NO_BROWSER_INSTALL=1
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
