@@ -59,7 +59,7 @@ export const reportsApi = {
     return res.data;
   },
 
-  sendEmail: async (reportId: string, payload: EmailPayload) => {
+  sendEmail: async (reportId: string, payload: { to: string; cc: string[]; bcc: string[]; subject: string; body: string; attachments: { name: string; type: string; data: string }[] }) => {
     const response = await client.post(`/v1/reports/${reportId}/email`, payload);
     return response.data;
   },
@@ -84,4 +84,20 @@ export const reportsApi = {
       const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
       window.open(`${BASE}/api/v1/reports/export?token=${token}`, "_blank");
   },
+  downloadScreenshot: async (reportId: string, type: "ftc" | "ic3"): Promise<void> => {
+  const res = await client.get(`/v1/reports/${reportId}/screenshot`, {
+    params: { type },
+    responseType: "blob",
+  });
+
+  const blob = new Blob([res.data], { type: "image/png" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${type}_complaint_${reportId}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+},
 };

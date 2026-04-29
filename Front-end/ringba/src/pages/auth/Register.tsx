@@ -46,7 +46,7 @@ const Register: React.FC = () => {
             <Shield size={28} className="text-red-400" />
           </div>
           <h1 className="text-white text-2xl font-bold tracking-tight">
-            Scam Slayer
+            Fraud Hunter
           </h1>
           <p className="text-[#4b5563] text-sm mt-1 font-mono">
             Security Operations Portal

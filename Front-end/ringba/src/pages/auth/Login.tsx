@@ -44,7 +44,7 @@ const Login: React.FC = () => {
             <Shield size={28} className="text-red-400" />
           </div>
           <h1 className="text-white text-2xl font-bold tracking-tight">
-            Scam Slayer
+            Fraud Hunter
           </h1>
           <p className="text-[#4b5563] text-sm mt-1 font-mono">
             Security Operations Portal
@@ -130,7 +130,7 @@ const Login: React.FC = () => {
         </div>
 
         <p className="text-[#2a2d3a] text-xs text-center mt-6 font-mono">
-          Scam Slayer Portal v1.0
+          Fraud Hunter Portal v1.0
         </p>
       </div>
     </div>

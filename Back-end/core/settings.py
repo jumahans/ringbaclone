@@ -1,17 +1,31 @@
 import os
+import sys
 from pathlib import Path
+from datetime import timedelta
 from dotenv import load_dotenv
+import dj_database_url
 
 load_dotenv()
 
+# ──────────────────────────────────────────────
+# Base
+# ──────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ──────────────────────────────────────────────
+# Security
+# ──────────────────────────────────────────────
 SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set. Add it to your .env or Render environment.")
 
-DEBUG = os.getenv("DEBUG", "True") == "True"
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# ──────────────────────────────────────────────
+# Applications
+# ──────────────────────────────────────────────
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -26,6 +40,9 @@ INSTALLED_APPS = [
     "ninja_jwt",
 ]
 
+# ──────────────────────────────────────────────
+# Middleware
+# ──────────────────────────────────────────────
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -40,6 +57,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "core.urls"
 
+# ──────────────────────────────────────────────
+# Templates
+# ──────────────────────────────────────────────
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -56,37 +76,62 @@ TEMPLATES = [
     }
 ]
 
-# ASGI for WebSockets (Daphne)
+# ──────────────────────────────────────────────
+# ASGI / WebSockets
+# ──────────────────────────────────────────────
 ASGI_APPLICATION = "core.asgi.application"
 
+# ──────────────────────────────────────────────
 # Database
-import dj_database_url
+# ──────────────────────────────────────────────
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set.")
+
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL", "sqlite:///db.sqlite3"),
+        default=DATABASE_URL,
         conn_max_age=600,
         conn_health_checks=True,
     )
 }
 
-# Channel layers (WebSockets via Redis)
+# ──────────────────────────────────────────────
+# Redis — Channel Layers
+# ──────────────────────────────────────────────
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379")
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [os.getenv("REDIS_URL", "redis://127.0.0.1:6379")],
+            "hosts": [REDIS_URL],
         },
     }
 }
 
+# ──────────────────────────────────────────────
 # Celery
-CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
-CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+# ──────────────────────────────────────────────
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = "UTC"
 
-# Static files
+# ──────────────────────────────────────────────
+# Cache
+# ──────────────────────────────────────────────
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
+# ──────────────────────────────────────────────
+# Static & Media Files
+# ──────────────────────────────────────────────
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
@@ -94,39 +139,38 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# CORS
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",
-#     "http://localhost:5174",
-#     "http://127.0.0.1:5173",
-#     "http://127.0.0.1:5174",
-#     "https://jumahans.github.io/",
-# ]
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True
-
-# Email
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-SCAM_SLAYER_REPLY_EMAIL = os.getenv("SCAM_SLAYER_REPLY_EMAIL", EMAIL_HOST_USER)
-
-# Auth
-SCAM_SLAYER_API_KEY = os.getenv("SCAM_SLAYER_API_KEY", "changeme")
-
-# RespOrg
-# RespOrg
-RESPORG_BACKEND = os.getenv("RESPORG_BACKEND", "abstract")
-ABSTRACT_API_KEY = os.getenv("ABSTRACT_API_KEY", "")
-
-
 SCREENSHOTS_DIR = BASE_DIR / "media" / "screenshots"
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+# ──────────────────────────────────────────────
+# CORS
+# ──────────────────────────────────────────────
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://www.fraudhunter.net",
+    "https://fraudhunter.net",
+    "https://fraudhunter-frontend.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+]
+
+# ──────────────────────────────────────────────
+# Email  (defined ONCE — no duplicates)
+# ──────────────────────────────────────────────
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False") == "True"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
+SCAM_SLAYER_REPLY_EMAIL = os.getenv("SCAM_SLAYER_REPLY_EMAIL", EMAIL_HOST_USER)
+
+# ──────────────────────────────────────────────
+# Auth & Custom User
+# ──────────────────────────────────────────────
+AUTH_USER_MODEL = "authentication.User"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -135,16 +179,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
-USE_I18N = True
-USE_TZ = True
-
-
-
-# JWT Auth
-from datetime import timedelta
-
+# ──────────────────────────────────────────────
+# JWT
+# ──────────────────────────────────────────────
 NINJA_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=8),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -152,32 +189,33 @@ NINJA_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-AUTH_USER_MODEL = "authentication.User"
-
-
 NINJA_AUTH = None
 
-# Production
-import sys
+# ──────────────────────────────────────────────
+# App-specific keys
+# ──────────────────────────────────────────────
+SCAM_SLAYER_API_KEY = os.getenv("SCAM_SLAYER_API_KEY", "changeme")
+RESPORG_BACKEND = os.getenv("RESPORG_BACKEND", "abstract")
+ABSTRACT_API_KEY = os.getenv("ABSTRACT_API_KEY", "")
+
+# ──────────────────────────────────────────────
+# Internationalisation
+# ──────────────────────────────────────────────
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = True
+USE_TZ = True
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ──────────────────────────────────────────────
+# Production hardening (only when DEBUG=False)
+# ──────────────────────────────────────────────
 if not DEBUG:
-    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-
-# Cache — use Redis for cross-thread cache storage
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": os.getenv("REDIS_URL", "redis://127.0.0.1:6379"),
-    }
-}
-
-
-EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
-EMAIL_HOST = os.getenv('EMAIL_HOST')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 465))
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL') == 'True'
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
-EMAIL_USE_TLS=False
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

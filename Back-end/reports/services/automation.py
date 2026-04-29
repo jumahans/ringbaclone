@@ -7,6 +7,7 @@ import json
 from typing import Tuple, Optional
 from seleniumbase import SB
 import random 
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -564,6 +565,7 @@ def submit_ftc_complaint(
 ) -> Tuple[bool, str, Optional[str]]:
 
     screenshot_path = os.path.join(SCREENSHOTS_DIR, f"ftc_{phone_number}.png")
+    screenshot_b64 = None
 
     escaped_description = (
         f"They are impersonating {brand}. "
@@ -677,9 +679,11 @@ def submit_ftc_complaint(
                 ftc_human_delay(500, 800)
                 try:
                     sb.save_screenshot(screenshot_path)
+                    with open(screenshot_path, "rb") as f:
+                        screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
                 except Exception as e:
                     print(f"Screenshot failed: {e}")
-                return (True, "FTC complaint submitted", screenshot_path)
+                return (True, "FTC complaint submitted", screenshot_path, screenshot_b64)
             # Step 6: Reporter info
             sb.wait_for_element_present("#yes-or-no-report-other-yes", timeout=15)
             ftc_human_delay(600, 1200)
@@ -738,6 +742,8 @@ def submit_ftc_complaint(
                     sb.execute_script("window.scrollTo(0, 0);")
                     ftc_human_delay(500, 800)
                     sb.save_screenshot(screenshot_path)
+                    with open(screenshot_path, "rb") as f:
+                        screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
                     print(f"[+] FTC screenshot saved: {screenshot_path}")
                 except Exception as e:
                     print(f"Screenshot failed: {e}")
@@ -746,6 +752,7 @@ def submit_ftc_complaint(
                 success,
                 "FTC complaint submitted" if success else "FTC submission failed",
                 screenshot_path if success else None,
+                screenshot_b64 if success else None,
             )
             # sb.execute_script(
             #     "(function() {"
@@ -779,7 +786,7 @@ def submit_ftc_complaint(
 
     except Exception as e:
         logger.error(f"FTC submission failed: {e}")
-        return (False, str(e), None)
+        return (False, str(e), None, None)
 
 
 
@@ -1518,6 +1525,7 @@ def submit_ic3_complaint(
     reporter_full_name = f"{reporter_first_name or ''} {reporter_last_name or ''}".strip()
     reporter_zip_str   = str(reporter_zip) if reporter_zip else ""
     screenshot_path    = os.path.join(SCREENSHOTS_DIR, f"ic3_{phone_number}.png")
+    screenshot_b64     = None
 
     incident_text = (
         f"Phone number {phone_number} impersonating {brand}. Landing page: {landing_url}."
@@ -1708,6 +1716,8 @@ def submit_ic3_complaint(
             print("Submitting form...")
             try:
                 sb.save_screenshot(screenshot_path)
+                with open(screenshot_path, "rb") as f:
+                    screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
                 print(f"[+] Pre-submit screenshot saved: {screenshot_path}")
             except Exception as e:
                 print(f"Pre-submit screenshot failed: {e}")
@@ -1735,6 +1745,8 @@ def submit_ic3_complaint(
                         confirmation_url  = current_url
                         try:
                             sb.save_screenshot(screenshot_path)
+                            with open(screenshot_path, "rb") as f:
+                                screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
                             print(f"[+] Screenshot saved: {screenshot_path}")
                         except Exception as e:
                             print(f"Screenshot failed: {e}")
@@ -1747,6 +1759,8 @@ def submit_ic3_complaint(
                         ic3_human_delay(2000, 3000)
                         try:
                             sb.save_screenshot(screenshot_path)
+                            with open(screenshot_path, "rb") as f:
+                                    screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
                             print(f"[+] Screenshot saved (search redirect): {screenshot_path}")
                         except Exception as e:
                             print(f"Screenshot failed: {e}")
@@ -1757,6 +1771,8 @@ def submit_ic3_complaint(
                         confirmation_url  = current_url
                         try:
                             sb.save_screenshot(screenshot_path)
+                            with open(screenshot_path, "rb") as f:
+                                screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
                         except Exception:
                             pass
                         break
@@ -1814,6 +1830,7 @@ def submit_ic3_complaint(
                 success,
                 "IC3 complaint submitted" if success else "IC3 submission failed",
                 screenshot_path if success else None,
+                screenshot_b64 if success else None,
             )
 
     except Exception as e:

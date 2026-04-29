@@ -1,9 +1,11 @@
 services:
   - type: web
-    name: scam-slayer-api
+    name: fraudhunter-api
     env: python
+    rootDir: Back-end
     buildCommand: "./build.sh"
     startCommand: "daphne -p $PORT -b 0.0.0.0 core.asgi:application"
+    plan: standard
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -11,26 +13,50 @@ services:
         value: "False"
       - key: DATABASE_URL
         fromDatabase:
-          name: scam-slayer-db
+          name: fraudhunter-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: scam-slayer-redis
-          type: redis
+          name: fraudhunter-redis
+          type: psc
           property: connectionString
       - key: ALLOWED_HOSTS
-        value: ".onrender.com"
+        value: "fraudhunter-api.onrender.com,api.fraudhunter.net"
       - key: CORS_ALLOWED_ORIGINS
-        value: "https://jumahans.github.io"
+        value: "https://www.fraudhunter.net,https://fraudhunter.net,https://fraudhunter-frontend.vercel.app"
       - key: SCAM_SLAYER_API_KEY
         generateValue: true
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: IPQS_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        value: "smtp.resend.com"
+      - key: EMAIL_PORT
+        value: "465"
+      - key: EMAIL_USE_SSL
+        value: "True"
+      - key: EMAIL_USE_TLS
+        value: "False"
+      - key: EMAIL_HOST_USER
+        value: "resend"
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        value: "FraudHunter <reports@fraudhunter.net>"
       - key: RESPORG_BACKEND
         value: "local"
 
-  - type: redis
-    name: scam-slayer-redis
-    plan: free
+  - type: psc
+    name: fraudhunter-redis
+    plan: starter
 
 databases:
-  - name: scam-slayer-db
-    plan: free
+  - name: fraudhunter-db
+    plan: free        

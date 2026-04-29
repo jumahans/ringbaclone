@@ -507,7 +507,24 @@ def google_ad_library(request, domain: str):
     return search_google_ads(domain=domain)
 
 
+from django.http import HttpResponse
+from reports.models import ScamReport  # adjust import to your model
 
+@router.get("/v1/reports/{report_id}/screenshot")
+def get_screenshot(request, report_id: str, type: str = "ftc"):
+    report = ScamReport.objects.get(id=report_id)
+    
+    # Choose path based on type
+    if type == "ic3":
+        path = report.ic3_screenshot_path  # adjust to your field name
+    else:
+        path = report.ftc_screenshot_path  # adjust to your field name
+
+    if not path or not os.path.exists(path):
+        return {"error": "Screenshot not found"}, 404
+
+    with open(path, "rb") as f:
+        return HttpResponse(f.read(), content_type="image/png")
 
 
 from django.http import HttpResponse
