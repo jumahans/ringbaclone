@@ -122,3 +122,6 @@ uvicorn[standard]
 pytesseract
 Pillow
 playwright
+seleniumbase==4.48.2
+selenium==4.43.0
+sbvirtualdisplay==1.4.0
