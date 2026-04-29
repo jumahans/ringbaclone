@@ -8,8 +8,7 @@ RUN pip install -r requirements.txt
 COPY . .
 
 RUN playwright install chromium
-RUN python manage.py collectstatic --no-input
 
 EXPOSE 10000
 
-CMD python manage.py migrate && daphne -p $PORT -b 0.0.0.0 core.asgi:application
+CMD python manage.py migrate && python manage.py collectstatic --no-input && daphne -p $PORT -b 0.0.0.0 core.asgi:application
