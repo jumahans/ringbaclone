@@ -178,3 +178,7 @@ def scrape_800forall_cnam(phone_number: str, max_retries: int = 5) -> str:
 
     logger.error(f"[800FORALL] All {max_retries} attempts failed for {phone_number}")
     return ""
+
+logging.basicConfig(level=logging.INFO)
+result = scrape_800forall_cnam('8557141574')
+print('CNAM RESULT:', repr(result))
