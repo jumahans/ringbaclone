@@ -559,3 +559,21 @@ def export_reports_csv(request):
         ])
 
     return response
+
+
+
+
+
+@router.get("/reports/{report_id}/screenshot", auth=auth, tags=["Screenshots"])
+def get_screenshot_by_type(request, report_id: UUID, type: str = "ftc"):
+    report = get_object_or_404(ScamReport, id=report_id)
+    
+    if type == "ftc":
+        path = report.ftc_screenshot
+    else:
+        path = report.ic3_screenshot
+
+    if not path or not os.path.exists(path):
+        raise HttpError(404, "Screenshot not found")
+
+    return FileResponse(open(path, 'rb'), content_type='image/png')
