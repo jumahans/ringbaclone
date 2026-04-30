@@ -3066,7 +3066,7 @@ def find_phone(text):
             if c:
                 return c
             idx += 1
-    return """
+    return ""
 
 
 
