@@ -22,6 +22,7 @@ from reports.schemas import (
     PaginatedReports,
     LookupIn,
     LookupOut,
+    SentEmailOut,
 )
 from reports.tasks import process_resporg_lookup, process_report_complaint, submit_to_authorities
 from reports.services.resporg import lookup_resporg, extract_phone_from_url, normalize_phone, extract_campaign_data
@@ -594,6 +595,20 @@ def export_reports_csv(request):
 #     return FileResponse(open(path, 'rb'), content_type='image/png')
 
 
+
+@router.get("/reports/{report_id}/emails", response=list[SentEmailOut], auth=auth)
+def get_report_emails(request, report_id: str):
+    from .models import ScamReport, SentEmail
+    
+    try:
+        report = ScamReport.objects.get(id=report_id)
+        if request.user.role != "admin" and report.submitted_by != request.user:
+            raise HttpError(403, "Not authorized")
+        
+        emails = report.sent_emails.all()
+        return emails
+    except ScamReport.DoesNotExist:
+        raise HttpError(404, "Report not found")
 
 
 @router.get("/reports/{report_id}/screenshot", auth=auth, tags=["Screenshots"])
