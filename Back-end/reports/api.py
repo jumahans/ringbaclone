@@ -611,6 +611,18 @@ def get_report_emails(request, report_id: str):
         raise HttpError(404, "Report not found")
 
 
+@router.get("/emails/all", response=list[SentEmailOut], auth=auth)
+def get_all_emails(request):
+    from .models import SentEmail
+    
+    if request.user.role == "admin":
+        emails = SentEmail.objects.all().order_by("-sent_at")
+    else:
+        emails = SentEmail.objects.filter(report__submitted_by=request.user).order_by("-sent_at")
+    
+    return emails
+
+
 @router.get("/reports/{report_id}/screenshot", auth=auth, tags=["Screenshots"])
 def get_screenshot_by_type(request, report_id: UUID, type: str = "ftc"):
     report = get_object_or_404(ScamReport, id=report_id)
