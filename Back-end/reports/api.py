@@ -539,20 +539,7 @@ from reports.models import ScamReport  # adjust import to your model
 #         return HttpResponse(f.read(), content_type="image/png")
 
 
-@router.get("/v1/reports/{report_id}/screenshot")
-def get_screenshot(request, report_id: str, type: str = "ftc"):
-    report = ScamReport.objects.get(id=report_id)
-    
-    if type == "ic3":
-        path = report.ic3_screenshot_path
-    else:
-        path = report.ftc_screenshot_path
 
-    if not path or not os.path.exists(path):
-        return {"error": "Screenshot not found"}, 404
-
-    with open(path, "rb") as f:
-        return HttpResponse(f.read(), content_type="image/png")
 
 from django.http import HttpResponse
 import csv

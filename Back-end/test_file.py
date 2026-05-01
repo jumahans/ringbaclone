@@ -162,17 +162,23 @@
 
 
 
-from twilio.rest import Client
 import os
+from twilio.rest import Client
 
-client = Client(
-    "ACf744b4a8a52498b8f7d2f69d287d1814",
-    "2fbc6d5a5f411f58d3f8fb8c44676667"
+# Option 1: Hardcode for testing only (then remove)
+api_key_sid = "SK69e4ac4610171d67efa89cf4d586000d"
+api_key_secret = "OIXpjMJJAWqMIFAZW9o4XR6xAbJHcvSE"
+
+# Option 2: Load from environment (better)
+# api_key_sid = os.environ.get('TWILIO_API_KEY_SID')
+# api_key_secret = os.environ.get('TWILIO_API_KEY_SECRET')
+
+client = Client(api_key_sid, api_key_secret)
+
+# Try with a real, valid US mobile number first
+lookup = client.lookups.v2.phone_numbers("+15108675310").fetch(
+    fields="line_type_intelligence"
 )
 
-lookup = client.lookups.v2.phone_numbers("+18885550100").fetch(
-    fields="caller_name"
-)
-
-print("Caller Name:", lookup.caller_name)
-print("Line Type:", lookup.line_type_intelligence)
+print(lookup.phone_number)
+print(lookup.line_type_intelligence)
