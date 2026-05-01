@@ -180,12 +180,13 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ──────────────────────────────────────────────
-# JWT
+# JWT (ONLY ONE CONFIG - REMOVED DUPLICATE)
 # ──────────────────────────────────────────────
 NINJA_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=8),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),  # Changed from 8 hours to 15 min for security
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
