@@ -114,5 +114,18 @@ class LookupOut(Schema):
     line_status: str
     sms_email: str
     sms_domain: str
-    mcc: str
-    mnc: str
+    mcc: str | None = None      # ← FIXED: Allows None
+    mnc: str | None = None 
+
+
+
+class SentEmailOut(Schema):
+    id: str
+    email_type: str
+    recipient: str
+    cc_recipients: str
+    subject: str
+    body_preview: str
+    status: str
+    error_message: str
+    sent_at: datetime

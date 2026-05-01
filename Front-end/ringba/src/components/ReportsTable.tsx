@@ -461,7 +461,7 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     setLogsLoading(reportId);
     try {
       const report = await reportsApi.getReport(reportId);
-      const fetchedLogs = report.logs || [];
+      const fetchedLogs =(report as any).logs || [];
       setLogs((prev) => ({ ...prev, [reportId]: fetchedLogs }));
 
       // Check logs to set done states from history
@@ -484,7 +484,7 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     setLogsLoading(reportId);
     try {
       const report = await reportsApi.getReport(reportId);
-      const fetchedLogs = report.logs || [];
+      const fetchedLogs = (report as any).logs || [];
       setLogs((prev) => ({ ...prev, [reportId]: fetchedLogs }));
 
       const hasAuthorities = fetchedLogs.some((l: ReportLog) =>
@@ -506,9 +506,20 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     onReport(id);
   };
 
+
+
   const handleEmailSent = async (id: string, payload: EmailPayload) => {
     await onEmailReport(id, payload);
     setEmailDone((prev) => new Set(prev).add(id));
+  };
+  
+
+  const handleDownloadScreenshot = async (reportId: string, type: "ftc" | "ic3") => {
+    try {
+      await reportsApi.downloadScreenshot(reportId, type);
+    } catch (e) {
+      console.error("Screenshot download failed", e);
+    }
   };
 
   return (
@@ -661,6 +672,22 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
                                       <span className="text-white font-medium">{ACTION_LABELS[log.action] || log.action}</span>
                                       <span className="text-[#4b5563] mx-2">—</span>
                                       <span className="text-[#9ca3af] break-all">{log.detail}</span>
+                                      {log.success && log.action === "FTC_SUBMISSION" && (
+                                        <button
+                                          onClick={() => handleDownloadScreenshot(r.id, "ftc")}
+                                          className="ml-2 text-blue-400 hover:text-blue-300 underline underline-offset-2 shrink-0"
+                                        >
+                                          Download screenshot
+                                        </button>
+                                      )}
+                                      {log.success && log.action === "IC3_SUBMISSION" && (
+                                        <button
+                                          onClick={() => handleDownloadScreenshot(r.id, "ic3")}
+                                          className="ml-2 text-blue-400 hover:text-blue-300 underline underline-offset-2 shrink-0"
+                                        >
+                                          Download screenshot
+                                        </button>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-1 text-[#374151] shrink-0">
                                       <Clock size={10} />

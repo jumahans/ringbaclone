@@ -6,40 +6,6 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-COMPLAINT_TEMPLATE = """
-Dear {carrier_name} Trust & Safety Team,
-
-We are reporting the following toll-free number for fraudulent activity
-impersonating {brand}. We request immediate investigation and termination
-of service.
-
-REPORTED NUMBER:    {phone_number}
-IMPERSONATED BRAND: {brand}
-RespOrg ID:         {resporg_code}
-LANDING PAGE:       {landing_url}
-DATE DETECTED:      {date_detected}
-REPORT ID:          {report_id}
-
-Evidence:
-This number has been used in active social engineering attacks against
-consumers. The landing page (if applicable) has been documented with
-screenshot evidence available upon request.
-
-Applicable Law:
-- 47 U.S.C. § 228 (Prohibition on Provision of Certain Operator Services)
-- FTC Act § 5 (Unfair or Deceptive Acts or Practices)
-- TRACED Act (2019) — carrier obligations to combat robocall fraud
-
-We request:
-1. Immediate suspension of the number {phone_number}
-2. Preservation of all subscriber records for law enforcement
-3. Confirmation of action to: {reply_to}
-
-Sincerely,
-FraudHunter Portal
-Automated Abuse Reporting System
-""".strip()
-
 
 CARRIER_ABUSE_EMAILS = {
     "somosgov": "abuse@somos.com",
@@ -157,29 +123,14 @@ def send_resporg_complaint(
 
     logger.info(f"CC emails for report {report_id}: {cc_emails}")
 
-    # Resolve Subject
-    subject = (
-        subject_override.strip()
-        if subject_override
-        else f"[URGENT] Toll-Free Number Abuse — {phone_number}"
-    )
+    # Resolve Subject (use override if provided)
+    subject = subject_override.strip() if subject_override else f"[URGENT] Toll-Free Number Abuse — {phone_number}"
 
-    # Resolve Body
-    body = (
-        body_override.strip()
-        if body_override
-        else COMPLAINT_TEMPLATE.format(
-            abuse_email=recipient,
-            phone_number=phone_number,
-            brand=brand,
-            resporg_code=resporg_code,
-            carrier_name=carrier_name,
-            landing_url=landing_url or "N/A",
-            date_detected=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-            reply_to=reply_to,
-            report_id=report_id,
-        )
-    )
+    # Resolve Body (use override if provided - NO TEMPLATE)
+    body = body_override.strip() if body_override else ""
+
+    if not body:
+        return False, "No email body provided."
 
     # Send
     try:
@@ -213,6 +164,23 @@ def send_resporg_complaint(
                 logger.warning(f"Could not attach {att.get('name')}: {att_err}")
 
         email.send(fail_silently=False)
+        
+        # ✅ LOG THE SENT EMAIL
+        try:
+            from reports.models import ScamReport, SentEmail
+            report = ScamReport.objects.get(id=report_id)
+            SentEmail.objects.create(
+                report=report,
+                email_type=SentEmail.EmailType.CARRIER_ABUSE,
+                recipient=recipient,
+                cc_recipients=", ".join(cc_emails) if cc_emails else "",
+                subject=subject,
+                body_preview=body[:200] + "..." if len(body) > 200 else body,
+                status="sent",
+            )
+        except Exception as log_err:
+            logger.warning(f"Failed to log email: {log_err}")
+
         logger.info(
             f"Complaint sent for {phone_number} to {recipient} CC: {cc_emails}"
         )
@@ -220,5 +188,22 @@ def send_resporg_complaint(
             f" with CC to {', '.join(cc_emails)}" if cc_emails else ""
         )
     except Exception as e:
+        # ✅ LOG THE FAILED EMAIL ATTEMPT
+        try:
+            from reports.models import ScamReport, SentEmail
+            report = ScamReport.objects.get(id=report_id)
+            SentEmail.objects.create(
+                report=report,
+                email_type=SentEmail.EmailType.CARRIER_ABUSE,
+                recipient=recipient if recipient else "unknown",
+                cc_recipients=", ".join(cc_emails) if cc_emails else "",
+                subject=subject,
+                body_preview=body[:200] + "..." if len(body) > 200 else body,
+                status="failed",
+                error_message=str(e),
+            )
+        except Exception as log_err:
+            logger.warning(f"Failed to log failed email: {log_err}")
+            
         logger.error(f"Failed to send complaint for {phone_number}: {e}")
         return False, str(e)
