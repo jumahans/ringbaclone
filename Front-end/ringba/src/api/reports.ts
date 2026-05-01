@@ -1,6 +1,5 @@
 import client from "./client";
-import type{ PaginatedReports, ScamReport, Stats, ActionResult } from "../types";
-
+import type { PaginatedReports, ScamReport, Stats, ActionResult, SentEmail } from "../types";
 export const reportsApi = {
   getStats: async (): Promise<Stats> => {
     const res = await client.get("/v1/stats");
@@ -68,6 +67,11 @@ export const reportsApi = {
     const response = await client.get(`/v1/reports/${reportId}/emails`);
     return response.data;
   },
+
+  getAllEmails: async (): Promise<SentEmail[]> => {
+  const response = await client.get("/v1/emails/all");
+  return response.data;
+  } ,
 
   searchFacebookAds: async (domain: string, campaignId: string = "") => {
       const res = await client.get("/v1/ad-library/facebook", {
