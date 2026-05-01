@@ -162,23 +162,39 @@
 
 
 
-import os
-from twilio.rest import Client
+# import os
+# from twilio.rest import Client
 
-# Option 1: Hardcode for testing only (then remove)
-api_key_sid = "SK69e4ac4610171d67efa89cf4d586000d"
-api_key_secret = "OIXpjMJJAWqMIFAZW9o4XR6xAbJHcvSE"
+# # Option 1: Hardcode for testing only (then remove)
+# api_key_sid = "SK69e4ac4610171d67efa89cf4d586000d"
 
-# Option 2: Load from environment (better)
-# api_key_sid = os.environ.get('TWILIO_API_KEY_SID')
-# api_key_secret = os.environ.get('TWILIO_API_KEY_SECRET')
+# api_key_secret = "OIXpjMJJAWqMIFAZW9o4XR6xAbJHcvSE"
 
-client = Client(api_key_sid, api_key_secret)
+# # Option 2: Load from environment (better)
+# # api_key_sid = os.environ.get('TWILIO_API_KEY_SID')
+# # api_key_secret = os.environ.get('TWILIO_API_KEY_SECRET')
 
-# Try with a real, valid US mobile number first
-lookup = client.lookups.v2.phone_numbers("+15108675310").fetch(
-    fields="line_type_intelligence"
-)
+# client = Client(api_key_sid, api_key_secret)
 
-print(lookup.phone_number)
-print(lookup.line_type_intelligence)
+# # Try with a real, valid US mobile number first
+# lookup = client.lookups.v2.phone_numbers("+15108675310").fetch(
+#     fields="line_type_intelligence"
+# )
+
+# print(lookup.phone_number)
+# print(lookup.line_type_intelligence)
+
+
+
+
+from resporg import lookup_resporg
+
+result = lookup_resporg("5108675310")
+print(f"Carrier: {result.carrier_name}")
+print(f"Line type: {result.line_type}")
+print(f"MCC: {result.mcc}")
+print(f"MNC: {result.mnc}")
+
+
+
+
