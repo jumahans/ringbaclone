@@ -60,3 +60,16 @@ export interface ActionResult {
   report_id: string;
   new_status: string;
 }
+
+
+export interface SentEmail {
+  id: string;
+  email_type: string;
+  recipient: string;
+  cc_recipients: string;
+  subject: string;
+  body_preview: string;
+  status: string;
+  error_message: string;
+  sent_at: string;
+}

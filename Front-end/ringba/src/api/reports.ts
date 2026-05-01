@@ -64,6 +64,11 @@ export const reportsApi = {
     return response.data;
   },
 
+  getReportEmails: async (reportId: string): Promise<SentEmail[]> => {
+    const response = await client.get(`/v1/reports/${reportId}/emails`);
+    return response.data;
+  },
+
   searchFacebookAds: async (domain: string, campaignId: string = "") => {
       const res = await client.get("/v1/ad-library/facebook", {
           params: { domain, campaign_id: campaignId },

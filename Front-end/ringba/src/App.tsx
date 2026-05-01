@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import Dashboard from "./pages/Dashboard";
+import EmailLogs from "./pages/EmailLogs"; // ✅ ADD THIS
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -33,6 +34,15 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      {/* ✅ ADD THIS ROUTE */}
+      <Route
+        path="/emails"
+        element={
+          <ProtectedRoute>
+            <EmailLogs />
           </ProtectedRoute>
         }
       />
