@@ -15,7 +15,7 @@ interface ReportsTableProps {
   onEmailReport: (id: string, payload: EmailPayload) => Promise<void>;
 }
 
-export interface EmailAttachment {
+export interface EmailImage {
   name: string;
   type: string;
   data: string;
@@ -24,10 +24,10 @@ export interface EmailAttachment {
 export interface EmailPayload {
   to: string;
   cc: string[];
-  bcc: string[];
-  subject: string;
-  body: string;
-  attachments: EmailAttachment[];
+  phone_number: string;
+  scam_url: string;
+  carrier_name: string;
+  image?: EmailImage;
 }
 
 interface ReportLog {
@@ -71,8 +71,8 @@ const CARRIER_ABUSE_EMAILS: Record<string, string> = {
 };
 
 function resolveCarrierEmail(report: ScamReport): string {
-  if (report.resporg?.abuse_email) return report.resporg.abuse_email;
-  const name = (report.resporg?.carrier_name || report.resporg_raw || "").toLowerCase();
+  if ((report as any).resporg?.abuse_email) return (report as any).resporg.abuse_email;
+  const name = ((report as any).resporg?.carrier_name || report.resporg_raw || "").toLowerCase();
   for (const [key, email] of Object.entries(CARRIER_ABUSE_EMAILS)) {
     if (name.includes(key)) return email;
   }
@@ -91,11 +91,13 @@ const ComposeModal: React.FC<ComposeModalProps> = ({ report, onClose, onSend }) 
   const carrierEmail = resolveCarrierEmail(report);
 
   const [to, setTo] = useState(carrierEmail);
-  const [ccFields, setCcFields] = useState<string[]>(["ic3@ic3.gov", "spam@uce.gov"]);
-  const [bccFields, setBccFields] = useState<string[]>([""]);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
+  const [ccFields, setCcFields] = useState<string[]>([""]);
+  const [phoneNumber, setPhoneNumber] = useState(report.phone_number || "");
+  const [scamUrl, setScamUrl] = useState(report.landing_url || "");
+  const [carrierName, setCarrierName] = useState(
+    (report as any).resporg?.carrier_name || report.resporg_raw || ""
+  );
+  const [image, setImage] = useState<EmailImage | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,48 +108,38 @@ const ComposeModal: React.FC<ComposeModalProps> = ({ report, onClose, onSend }) 
   const removeCC = (i: number) =>
     setCcFields((prev) => prev.filter((_, idx) => idx !== i));
 
-  const addBCC = () => setBccFields((prev) => [...prev, ""]);
-  const updateBCC = (i: number, val: string) =>
-    setBccFields((prev) => prev.map((v, idx) => (idx === i ? val : v)));
-  const removeBCC = (i: number) =>
-    setBccFields((prev) => prev.filter((_, idx) => idx !== i));
-
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith("image/")) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        const base64 = result.split(",")[1];
-        setAttachments((prev) => [...prev, { name: file.name, type: file.type, data: base64 }]);
-      };
-      reader.readAsDataURL(file);
-    });
+  const handleFile = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const base64 = result.split(",")[1];
+      setImage({ name: file.name, type: file.type, data: base64 });
+    };
+    reader.readAsDataURL(file);
   };
-
-  const removeAttachment = (i: number) =>
-    setAttachments((prev) => prev.filter((_, idx) => idx !== i));
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    handleFiles(e.dataTransfer.files);
+    handleFile(e.dataTransfer.files);
   };
 
   const handleSend = async () => {
     if (!to.trim()) { setError("To address is required."); return; }
-    if (!subject.trim()) { setError("Subject is required."); return; }
-    if (!body.trim()) { setError("Body is required."); return; }
+    if (!phoneNumber.trim()) { setError("Phone number is required."); return; }
+    if (!carrierName.trim()) { setError("Carrier name is required."); return; }
     setSending(true);
     setError("");
     try {
       await onSend({
         to: to.trim(),
         cc: ccFields.map((c) => c.trim()).filter(Boolean),
-        bcc: bccFields.map((b) => b.trim()).filter(Boolean),
-        subject: subject.trim(),
-        body: body.trim(),
-        attachments,
+        phone_number: phoneNumber.trim(),
+        scam_url: scamUrl.trim(),
+        carrier_name: carrierName.trim(),
+        image: image || undefined,
       });
       onClose();
     } catch (e: any) {
@@ -182,7 +174,7 @@ const ComposeModal: React.FC<ComposeModalProps> = ({ report, onClose, onSend }) 
 
         <div className="divide-y divide-[#1a1d2e]">
           <div className="flex items-center gap-4 px-5 py-3">
-            <span className="text-xs text-[#4b5563] font-medium w-12 shrink-0">To</span>
+            <span className="text-xs text-[#4b5563] font-medium w-24 shrink-0">To</span>
             <input
               type="email"
               value={to}
@@ -195,7 +187,7 @@ const ComposeModal: React.FC<ComposeModalProps> = ({ report, onClose, onSend }) 
 
           <div className="px-5 py-3">
             <div className="flex items-start gap-4">
-              <span className="text-xs text-[#4b5563] font-medium w-12 shrink-0 pt-1.5">CC</span>
+              <span className="text-xs text-[#4b5563] font-medium w-24 shrink-0 pt-1.5">CC</span>
               <div className="flex-1 space-y-2">
                 {ccFields.map((cc, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -218,99 +210,78 @@ const ComposeModal: React.FC<ComposeModalProps> = ({ report, onClose, onSend }) 
             </div>
           </div>
 
-          <div className="px-5 py-3">
-            <div className="flex items-start gap-4">
-              <span className="text-xs text-[#4b5563] font-medium w-12 shrink-0 pt-1.5">BCC</span>
-              <div className="flex-1 space-y-2">
-                {bccFields.map((bcc, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input
-                      type="email"
-                      value={bcc}
-                      onChange={(e) => updateBCC(i, e.target.value)}
-                      placeholder="bcc@example.com"
-                      className="flex-1 bg-transparent text-sm text-white outline-none placeholder-[#374151]"
-                    />
-                    <button onClick={() => removeBCC(i)} className="text-[#374151] hover:text-red-400 transition-colors shrink-0">
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-                <button onClick={addBCC} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                  <Plus size={11} /> Add BCC
-                </button>
-              </div>
-            </div>
+          <div className="flex items-center gap-4 px-5 py-3">
+            <span className="text-xs text-[#4b5563] font-medium w-24 shrink-0">Phone Number</span>
+            <input
+              type="text"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="8333718469"
+              className="flex-1 bg-transparent text-sm text-white outline-none placeholder-[#374151] font-mono"
+            />
           </div>
 
           <div className="flex items-center gap-4 px-5 py-3">
-            <span className="text-xs text-[#4b5563] font-medium w-12 shrink-0">Subject</span>
+            <span className="text-xs text-[#4b5563] font-medium w-24 shrink-0">Scam URL</span>
             <input
               type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Subject"
+              value={scamUrl}
+              onChange={(e) => setScamUrl(e.target.value)}
+              placeholder="https://..."
+              className="flex-1 bg-transparent text-sm text-white outline-none placeholder-[#374151] font-mono"
+            />
+          </div>
+
+          <div className="flex items-center gap-4 px-5 py-3">
+            <span className="text-xs text-[#4b5563] font-medium w-24 shrink-0">Carrier Name</span>
+            <input
+              type="text"
+              value={carrierName}
+              onChange={(e) => setCarrierName(e.target.value)}
+              placeholder="Resporg Service LLC"
               className="flex-1 bg-transparent text-sm text-white outline-none placeholder-[#374151]"
             />
           </div>
 
-          <div className="flex items-start gap-4 px-5 py-3">
-            <span className="text-xs text-[#4b5563] font-medium w-12 shrink-0 pt-2">Body</span>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={13}
-              placeholder="Write your complaint here..."
-              className="flex-1 bg-transparent text-sm text-[#e2e8f0] outline-none resize-none leading-relaxed placeholder-[#374151]"
-            />
-          </div>
-
           <div className="px-5 py-3">
             <div className="flex items-start gap-4">
-              <span className="text-xs text-[#4b5563] font-medium w-12 shrink-0 pt-1">Images</span>
+              <span className="text-xs text-[#4b5563] font-medium w-24 shrink-0 pt-1">Image</span>
               <div className="flex-1 space-y-2">
-                {attachments.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {attachments.map((att, i) => (
-                      <div key={i} className="relative group">
-                        <img
-                          src={`data:${att.type};base64,${att.data}`}
-                          alt={att.name}
-                          className="w-16 h-16 object-cover rounded-lg border border-[#2a2d3a]"
-                        />
-                        <button
-                          onClick={() => removeAttachment(i)}
-                          className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X size={9} />
-                        </button>
-                        <span className="absolute bottom-0 left-0 right-0 text-[9px] text-white bg-black/60 rounded-b-lg px-1 py-0.5 truncate">
-                          {att.name}
-                        </span>
-                      </div>
-                    ))}
+                {image && (
+                  <div className="relative group inline-block">
+                    <img
+                      src={`data:${image.type};base64,${image.data}`}
+                      alt={image.name}
+                      className="w-20 h-20 object-cover rounded-lg border border-[#2a2d3a]"
+                    />
+                    <button
+                      onClick={() => setImage(null)}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center"
+                    >
+                      <X size={9} />
+                    </button>
+                    <span className="absolute bottom-0 left-0 right-0 text-[9px] text-white bg-black/60 rounded-b-lg px-1 py-0.5 truncate">
+                      {image.name}
+                    </span>
                   </div>
                 )}
-                <div
-                  onDrop={handleDrop}
-                  onDragOver={(e) => e.preventDefault()}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[#2a2d3a] hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors cursor-pointer"
-                >
-                  <Paperclip size={12} className="text-[#4b5563]" />
-                  <span className="text-xs text-[#4b5563]">
-                    {attachments.length > 0
-                      ? `${attachments.length} image${attachments.length !== 1 ? "s" : ""} attached — click or drop to add more`
-                      : "Click or drop images here"}
-                  </span>
-                </div>
+                {!image && (
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[#2a2d3a] hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors cursor-pointer"
+                  >
+                    <Paperclip size={12} className="text-[#4b5563]" />
+                    <span className="text-xs text-[#4b5563]">Click or drop an image here</span>
+                  </div>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  multiple
                   className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)}
+                  onChange={(e) => handleFile(e.target.files)}
                 />
               </div>
             </div>
@@ -326,8 +297,7 @@ const ComposeModal: React.FC<ComposeModalProps> = ({ report, onClose, onSend }) 
         <div className="flex items-center justify-between px-5 py-3 border-t border-[#1a1d2e]">
           <span className="text-xs text-[#374151] font-mono">
             {ccFields.filter(Boolean).length} CC{ccFields.filter(Boolean).length !== 1 ? "s" : ""}
-            {bccFields.filter(Boolean).length > 0 && ` · ${bccFields.filter(Boolean).length} BCC`}
-            {attachments.length > 0 && ` · ${attachments.length} image${attachments.length !== 1 ? "s" : ""}`}
+            {image && ` · 1 image`}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -379,7 +349,6 @@ const ReportDropdown: React.FC<ReportDropdownProps> = ({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // If both actions are done, show nothing
   if (authoritiesSubmitted && emailSent) return null;
 
   return (
@@ -395,7 +364,6 @@ const ReportDropdown: React.FC<ReportDropdownProps> = ({
             Report
           </button>
         )}
-        {/* Only show dropdown arrow if there's more than one option */}
         {(!authoritiesSubmitted || !emailSent) && (
           <button
             onClick={() => setOpen((o) => !o)}
@@ -451,7 +419,6 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
   const [logs, setLogs] = useState<Record<string, ReportLog[]>>({});
   const [logsLoading, setLogsLoading] = useState<string | null>(null);
   const [composeFor, setComposeFor] = useState<ScamReport | null>(null);
-  // Track which reports have had authorities submitted or email sent this session
   const [authoritiesDone, setAuthoritiesDone] = useState<Set<string>>(new Set());
   const [emailDone, setEmailDone] = useState<Set<string>>(new Set());
 
@@ -461,14 +428,13 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     setLogsLoading(reportId);
     try {
       const report = await reportsApi.getReport(reportId);
-      const fetchedLogs = report.logs || [];
+      const fetchedLogs = ((report as any).logs || []) as ReportLog[];
       setLogs((prev) => ({ ...prev, [reportId]: fetchedLogs }));
 
-      // Check logs to set done states from history
-      const hasAuthorities = fetchedLogs.some((l: ReportLog) =>
+      const hasAuthorities = fetchedLogs.some((l) =>
         l.action === "AUTHORITY_SUBMISSIONS_INITIATED" && l.success
       );
-      const hasEmail = fetchedLogs.some((l: ReportLog) =>
+      const hasEmail = fetchedLogs.some((l) =>
         (l.action === "EMAIL_SENT" || l.action === "email_sent") && l.success
       );
       if (hasAuthorities) setAuthoritiesDone((prev) => new Set(prev).add(reportId));
@@ -484,13 +450,13 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
     setLogsLoading(reportId);
     try {
       const report = await reportsApi.getReport(reportId);
-      const fetchedLogs = report.logs || [];
+      const fetchedLogs = ((report as any).logs || []) as ReportLog[];
       setLogs((prev) => ({ ...prev, [reportId]: fetchedLogs }));
 
-      const hasAuthorities = fetchedLogs.some((l: ReportLog) =>
+      const hasAuthorities = fetchedLogs.some((l) =>
         l.action === "AUTHORITY_SUBMISSIONS_INITIATED" && l.success
       );
-      const hasEmail = fetchedLogs.some((l: ReportLog) =>
+      const hasEmail = fetchedLogs.some((l) =>
         (l.action === "EMAIL_SENT" || l.action === "email_sent") && l.success
       );
       if (hasAuthorities) setAuthoritiesDone((prev) => new Set(prev).add(reportId));
@@ -564,7 +530,6 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
                           <span className="font-mono text-xs text-[#6b7280] bg-[#1a1d2e] px-2 py-1 rounded">{r.resporg_raw || "—"}</span>
                         </td>
                         <td className="px-5 py-4">
-                          {/* Use resporg_raw directly — it stores the carrier name from IPQS */}
                           <span className="text-[#9ca3af] text-xs">{r.resporg_raw || "Unknown"}</span>
                         </td>
                         <td className="px-5 py-4">

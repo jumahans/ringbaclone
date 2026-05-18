@@ -2,6 +2,7 @@ services:
   - type: web
     name: scam-slayer-api
     env: python
+    rootDir: Back-end
     buildCommand: "./build.sh"
     startCommand: "daphne -p $PORT -b 0.0.0.0 core.asgi:application"
     envVars:

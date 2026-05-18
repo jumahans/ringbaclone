@@ -84,4 +84,9 @@ export const reportsApi = {
       const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
       window.open(`${BASE}/api/v1/reports/export?token=${token}`, "_blank");
   },
+
+  sendComplaint: async (reportId: string, payload: any) => {
+  const response = await client.post(`/v1/reports/${reportId}/send-complaint`, payload);
+  return response.data;
+},
 };

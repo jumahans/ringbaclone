@@ -542,3 +542,68 @@ def export_reports_csv(request):
         ])
 
     return response
+
+class ImageIn(Schema):
+    name: str
+    type: str
+    data: str  # base64
+
+
+class SendComplaintIn(Schema):
+    to: str
+    cc: List[str] = []
+    phone_number: str
+    scam_url: str = ""
+    carrier_name: str
+    image: Optional[ImageIn] = None
+
+
+@router.post("/reports/{report_id}/send-complaint", auth=auth, tags=["Actions"])
+def send_complaint_email(request, report_id: UUID, payload: SendComplaintIn):
+    """
+    Send the universal abuse-report email via Proton.
+    Returns screenshot as base64 so frontend (phone or laptop) can download it.
+    """
+    from reports.services.proton_mailer import send_complaint
+
+    report = get_object_or_404(ScamReport, id=report_id)
+
+    success, message, screenshot_path = send_complaint(
+        to=payload.to,
+        cc=payload.cc,
+        phone_number=payload.phone_number,
+        scam_url=payload.scam_url or report.landing_url or "",
+        carrier_name=payload.carrier_name,
+        image=payload.image.dict() if payload.image else None,
+    )
+
+    screenshot_b64 = None
+    if screenshot_path and os.path.exists(screenshot_path):
+        with open(screenshot_path, "rb") as f:
+            screenshot_b64 = base64.b64encode(f.read()).decode("ascii")
+        try:
+            os.remove(screenshot_path)
+        except Exception:
+            pass
+
+    if success:
+        report.status = ScamReport.Status.REPORTED
+        report.report_sent_at = timezone.now()
+        report.save()
+
+    ReportLog.objects.create(
+        report=report,
+        action=ReportLog.Action.EMAIL_SENT,
+        detail=f"To: {payload.to} | CC: {', '.join(payload.cc) or 'none'} | {message}",
+        success=success,
+    )
+
+    return {
+        "success": success,
+        "message": message,
+        "report_id": str(report.id),
+        "new_status": report.status,
+        "screenshot": screenshot_b64,
+        "screenshot_mime": "image/png" if screenshot_b64 else None,
+        "screenshot_filename": f"complaint_{report_id}.png" if screenshot_b64 else None,
+    }

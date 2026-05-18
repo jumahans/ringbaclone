@@ -45,9 +45,11 @@ def register(request, payload: RegisterIn):
         from ninja.errors import HttpError
         raise HttpError(400, "Email already registered.")
 
+    import uuid
+
     user = User.objects.create_user(
+        username=payload.email,          # use email as username (most common approach)
         email=payload.email,
-        username=payload.username,
         password=payload.password,
         role=payload.role or "operator",
     )
